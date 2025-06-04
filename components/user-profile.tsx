@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -52,6 +52,8 @@ type UserType = {
   image_url: string | null;
   status: boolean;
   created_at: string;
+  address: string | null;
+  gender: string | null;
 };
 
 type SubscriptionType = {
@@ -59,6 +61,8 @@ type SubscriptionType = {
   user_id: string;
   payment_date: string;
   expiration_date: string;
+  total_days: number;
+  active_days: number;
   created_at: string;
 };
 
@@ -67,12 +71,26 @@ const userSchema = z.object({
   phone: z.string().min(10, { message: 'Please enter a valid phone number.' }),
   email: z.string().email({ message: 'Please enter a valid email.' }).optional().or(z.literal('')),
   status: z.boolean(),
+  address: z.string().optional().or(z.literal('')),
+  gender: z.string().optional().or(z.literal('')),
 });
 
 const subscriptionSchema = z.object({
   payment_date: z.date({ required_error: 'Payment date is required' }),
-  expiration_date: z.date({ required_error: 'Expiration date is required' }),
+  total_days: z.number().min(1, { message: 'Total days must be at least 1' }),
+  active_days: z.number().default(0),
 });
+
+// Add utility function for calculating remaining days
+const calculateRemainingDays = (totalDays: number, activeDays: number) => {
+  return Math.max(0, totalDays - activeDays);
+};
+
+// Add function to calculate actual expiration date based on active days
+const calculateActualExpirationDate = (paymentDate: Date, totalDays: number, activeDays: number) => {
+  const remainingDays = calculateRemainingDays(totalDays, activeDays);
+  return addDays(new Date(paymentDate), remainingDays);
+};
 
 export default function UserProfile({
   user,
@@ -98,6 +116,8 @@ export default function UserProfile({
       phone: user.phone,
       email: user.email || '',
       status: user.status,
+      address: user.address || '',
+      gender: user.gender || '',
     },
   });
   
@@ -105,7 +125,8 @@ export default function UserProfile({
     resolver: zodResolver(subscriptionSchema),
     defaultValues: {
       payment_date: new Date(),
-      expiration_date: addDays(new Date(), 30), // Default to 30 days
+      total_days: 30,
+      active_days: 0,
     },
   });
 
@@ -118,15 +139,63 @@ export default function UserProfile({
       .slice(0, 2);
   };
 
-  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImageChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0] || null;
     if (file) {
-      setNewImage(file);
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setImagePreview(reader.result as string);
-      };
-      reader.readAsDataURL(file);
+      try {
+        // Create a preview URL
+        const previewUrl = URL.createObjectURL(file);
+        setImagePreview(previewUrl);
+        
+        // Upload image to Supabase
+        const fileExt = file.name.split('.').pop();
+        const fileName = `${user.id}-${Date.now()}.${fileExt}`;
+        const filePath = `profiles/${fileName}`;
+        
+        const { error: uploadError, data } = await supabase
+          .storage
+          .from('member-images')
+          .upload(filePath, file, { 
+            upsert: true,
+            cacheControl: '0',
+          });
+          
+        if (uploadError) throw uploadError;
+        
+        // Get the public URL
+        const { data: { publicUrl } } = supabase
+          .storage
+          .from('member-images')
+          .getPublicUrl(filePath);
+
+        console.log('New image URL:', publicUrl);
+        
+        // Update the user with the new image URL
+        const { error: imageUpdateError } = await supabase
+          .from('users')
+          .update({ image_url: publicUrl })
+          .eq('id', user.id);
+          
+        if (imageUpdateError) throw imageUpdateError;
+
+        // Cleanup preview URL
+        URL.revokeObjectURL(previewUrl);
+        
+        toast({
+          title: "Image uploaded",
+          description: "Profile picture has been updated successfully.",
+        });
+
+        // Force a refresh to get the updated user data
+        router.refresh();
+      } catch (error) {
+        console.error('Error uploading image:', error);
+        toast({
+          title: "Error uploading image",
+          description: "There was a problem uploading the profile picture.",
+          variant: "destructive",
+        });
+      }
     }
   };
 
@@ -142,6 +211,8 @@ export default function UserProfile({
           phone: values.phone,
           email: values.email || null,
           status: values.status,
+          address: values.address || null,
+          gender: values.gender || null,
         })
         .eq('id', user.id);
         
@@ -198,12 +269,25 @@ export default function UserProfile({
     try {
       setIsAddingSubscription(true);
       
+      // If user is active, calculate active days from payment date until now
+      const initialActiveDays = user.status ? 
+        Math.floor((new Date().getTime() - values.payment_date.getTime()) / (1000 * 60 * 60 * 24)) : 
+        0;
+      
+      const calculatedExpirationDate = calculateActualExpirationDate(
+        values.payment_date,
+        values.total_days,
+        initialActiveDays
+      );
+      
       const { error } = await supabase
         .from('subscriptions')
         .insert({
           user_id: user.id,
           payment_date: format(values.payment_date, 'yyyy-MM-dd'),
-          expiration_date: format(values.expiration_date, 'yyyy-MM-dd'),
+          expiration_date: format(calculatedExpirationDate, 'yyyy-MM-dd'),
+          total_days: values.total_days,
+          active_days: initialActiveDays,
         });
         
       if (error) throw error;
@@ -215,7 +299,8 @@ export default function UserProfile({
       
       subscriptionForm.reset({
         payment_date: new Date(),
-        expiration_date: addDays(new Date(), 30),
+        total_days: 30,
+        active_days: 0,
       });
       
       setIsSubscriptionDialogOpen(false);
@@ -232,28 +317,109 @@ export default function UserProfile({
     }
   };
 
-  const getSubscriptionStatus = (expiration_date: string) => {
+  const getSubscriptionStatus = (subscription: SubscriptionType) => {
     const today = new Date();
-    const expirationDate = new Date(expiration_date);
+    const expirationDate = new Date(subscription.expiration_date);
     const isExpired = isAfter(today, expirationDate);
-    const daysRemaining = differenceInDays(expirationDate, today);
+    const remainingDays = calculateRemainingDays(
+      subscription.total_days,
+      subscription.active_days
+    );
     
     if (isExpired) {
-      return { status: 'Expired', variant: 'destructive' as const, daysText: 'Expired' };
-    } else if (daysRemaining <= 7) {
+      return { 
+        status: 'Expired', 
+        variant: 'destructive' as const, 
+        daysText: 'Expired',
+        activeText: `${subscription.active_days}/${subscription.total_days} days used`
+      };
+    } else if (remainingDays <= 7) {
       return { 
         status: 'Expiring Soon', 
         variant: 'default' as const,
-        daysText: `${daysRemaining} days left`
+        daysText: `${remainingDays} days left`,
+        activeText: `${subscription.active_days}/${subscription.total_days} days used`
       };
     } else {
       return { 
         status: 'Active', 
         variant: 'outline' as const,
-        daysText: `${daysRemaining} days left`
+        daysText: `${remainingDays} days left`,
+        activeText: `${subscription.active_days}/${subscription.total_days} days used`
       };
     }
   };
+
+  // Add function to handle status change
+  const handleStatusChange = async (newStatus: boolean) => {
+    try {
+      // Update user status
+      const { error: userError } = await supabase
+        .from('users')
+        .update({ status: newStatus })
+        .eq('id', user.id);
+
+      if (userError) throw userError;
+
+      // If user is being set to inactive, we need to update the subscription
+      if (!newStatus) {
+        const latestSubscription = subscriptions[0]; // Assuming subscriptions are ordered by date
+        if (latestSubscription) {
+          const today = new Date();
+          const startDate = new Date(latestSubscription.payment_date);
+          const daysSinceStart = Math.floor((today.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24));
+          
+          // Update active days in the subscription
+          const { error: subError } = await supabase
+            .from('subscriptions')
+            .update({ 
+              active_days: daysSinceStart,
+              expiration_date: format(addDays(startDate, latestSubscription.total_days), 'yyyy-MM-dd')
+            })
+            .eq('id', latestSubscription.id);
+            
+          if (subError) throw subError;
+        }
+      }
+
+      toast({
+        title: "Status updated",
+        description: `Member is now ${newStatus ? 'active' : 'inactive'}.`,
+      });
+
+      router.refresh();
+    } catch (error) {
+      console.error('Error updating status:', error);
+      toast({
+        title: "Error updating status",
+        description: "There was a problem updating the member status.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  // Add real-time subscription to status changes
+  useEffect(() => {
+    const channel = supabase
+      .channel('status_changes')
+      .on('postgres_changes', 
+        { event: 'UPDATE', schema: 'public', table: 'users', filter: `id=eq.${user.id}` },
+        (payload) => {
+          // Refresh data when status changes
+          router.refresh();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [user.id, supabase, router]);
+
+  useEffect(() => {
+    console.log('Image URL:', user.image_url);
+    console.log('Image Preview:', imagePreview);
+  }, [user.image_url, imagePreview]);
 
   return (
     <div className="space-y-6">
@@ -270,9 +436,22 @@ export default function UserProfile({
         <CardHeader>
           <div className="flex items-start justify-between">
             <div className="flex items-center gap-4">
-              <Avatar className="h-16 w-16">
-                <AvatarImage src={imagePreview || undefined} alt={user.name} />
-                <AvatarFallback className="text-lg">{getInitials(user.name)}</AvatarFallback>
+              <Avatar className="h-16 w-16 relative">
+                {user.image_url && (
+                  <img 
+                    src={user.image_url} 
+                    alt={user.name}
+                    className="h-full w-full rounded-full object-cover"
+                    onLoad={() => console.log('Image loaded successfully')}
+                    onError={(e) => {
+                      console.error('Image failed to load:', user.image_url);
+                      e.currentTarget.style.display = 'none';
+                    }}
+                  />
+                )}
+                <AvatarFallback className="text-lg">
+                  {getInitials(user.name)}
+                </AvatarFallback>
               </Avatar>
               <div>
                 <CardTitle>{user.name}</CardTitle>
@@ -338,6 +517,34 @@ export default function UserProfile({
                       )}
                     />
                     
+                    <FormField
+                      control={userForm.control}
+                      name="address"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Address</FormLabel>
+                          <FormControl>
+                            <Input {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    <FormField
+                      control={userForm.control}
+                      name="gender"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Gender</FormLabel>
+                          <FormControl>
+                            <Input {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    
                     <div className="space-y-2">
                       <FormLabel>Member ID</FormLabel>
                       <Input 
@@ -352,7 +559,11 @@ export default function UserProfile({
                     <FormLabel>Profile Picture</FormLabel>
                     <div className="flex items-center gap-4">
                       <Avatar className="h-16 w-16">
-                        <AvatarImage src={imagePreview || undefined} alt={user.name} />
+                        <AvatarImage 
+                          src={imagePreview || user.image_url || undefined} 
+                          alt={user.name}
+                          className="object-cover"
+                        />
                         <AvatarFallback className="text-lg">{getInitials(user.name)}</AvatarFallback>
                       </Avatar>
                       <div>
@@ -382,7 +593,10 @@ export default function UserProfile({
                           <FormControl>
                             <Switch 
                               checked={field.value} 
-                              onCheckedChange={field.onChange} 
+                              onCheckedChange={(checked) => {
+                                field.onChange(checked);
+                                handleStatusChange(checked);
+                              }} 
                             />
                           </FormControl>
                           <FormLabel>Active Member</FormLabel>
@@ -459,31 +673,17 @@ export default function UserProfile({
                         
                         <FormField
                           control={subscriptionForm.control}
-                          name="expiration_date"
+                          name="total_days"
                           render={({ field }) => (
-                            <FormItem className="flex flex-col">
-                              <FormLabel>Expiration Date</FormLabel>
-                              <Popover>
-                                <PopoverTrigger asChild>
-                                  <FormControl>
-                                    <Button
-                                      variant="outline"
-                                      className="w-full justify-start text-left font-normal"
-                                    >
-                                      <CalendarIcon className="mr-2 h-4 w-4" />
-                                      {field.value ? format(field.value, 'PPP') : <span>Pick a date</span>}
-                                    </Button>
-                                  </FormControl>
-                                </PopoverTrigger>
-                                <PopoverContent className="w-auto p-0">
-                                  <Calendar
-                                    mode="single"
-                                    selected={field.value}
-                                    onSelect={field.onChange}
-                                    initialFocus
-                                  />
-                                </PopoverContent>
-                              </Popover>
+                            <FormItem>
+                              <FormLabel>Total Days</FormLabel>
+                              <FormControl>
+                                <Input 
+                                  type="number" 
+                                  {...field} 
+                                  onChange={(e) => field.onChange(parseInt(e.target.value))}
+                                />
+                              </FormControl>
                               <FormMessage />
                             </FormItem>
                           )}
@@ -518,7 +718,7 @@ export default function UserProfile({
               ) : (
                 <div className="space-y-4">
                   {subscriptions.map((subscription) => {
-                    const status = getSubscriptionStatus(subscription.expiration_date);
+                    const status = getSubscriptionStatus(subscription);
                     
                     return (
                       <Card key={subscription.id}>
@@ -544,6 +744,12 @@ export default function UserProfile({
                                   <Label className="text-xs text-muted-foreground">Expiration Date</Label>
                                   <p className="font-medium">
                                     {format(new Date(subscription.expiration_date), 'MMM d, yyyy')}
+                                  </p>
+                                </div>
+                                <div>
+                                  <Label className="text-xs text-muted-foreground">Active Days</Label>
+                                  <p className="font-medium">
+                                    {status.activeText}
                                   </p>
                                 </div>
                               </div>

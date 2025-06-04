@@ -11,11 +11,14 @@ import { Button } from '@/components/ui/button';
 import { Loader2, Upload } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { createClient } from '@/lib/supabase/client';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 const formSchema = z.object({
   name: z.string().min(2, { message: 'Name must be at least 2 characters.' }),
   phone: z.string().min(10, { message: 'Please enter a valid phone number.' }),
   email: z.string().email({ message: 'Please enter a valid email.' }).optional().or(z.literal('')),
+  address: z.string().min(5, { message: 'Please enter a valid address.' }),
+  gender: z.enum(['male', 'female'], { required_error: 'Please select a gender.' }),
 });
 
 export function MemberForm() {
@@ -32,6 +35,8 @@ export function MemberForm() {
       name: '',
       phone: '',
       email: '',
+      address: '',
+      gender: undefined,
     },
   });
 
@@ -51,24 +56,12 @@ export function MemberForm() {
     try {
       setIsLoading(true);
 
-      // First create the user
-      const { data: userData, error: userError } = await supabase
-        .from('users')
-        .insert({
-          name: values.name,
-          phone: values.phone,
-          email: values.email || null,
-          status: true,
-        })
-        .select('id')
-        .single();
+      let imageUrl = null;
 
-      if (userError) throw userError;
-
-      // If there's an image, upload it to storage
-      if (image && userData.id) {
+      // If there's an image, upload it first
+      if (image) {
         const fileExt = image.name.split('.').pop();
-        const fileName = `${userData.id}.${fileExt}`;
+        const fileName = `${crypto.randomUUID()}.${fileExt}`;
         const filePath = `profiles/${fileName}`;
 
         const { error: uploadError } = await supabase
@@ -81,17 +74,25 @@ export function MemberForm() {
         // Get the public URL
         const { data: publicURLData } = supabase
           .storage
-          .from('member-images')
+          .from('gym.members')
           .getPublicUrl(filePath);
 
-        // Update the user with the image URL
-        const { error: updateError } = await supabase
-          .from('users')
-          .update({ image_url: publicURLData.publicUrl })
-          .eq('id', userData.id);
-
-        if (updateError) throw updateError;
+        imageUrl = publicURLData.publicUrl;
       }
+
+      // Create the user with the image URL if available
+      const { error: userError } = await supabase
+        .from('users')
+        .insert({
+          name: values.name,
+          phone: values.phone,
+          email: values.email || null,
+          address: values.address,
+          gender: values.gender,
+          image_url: imageUrl,
+        });
+
+      if (userError) throw userError;
 
       toast({
         title: "Registration successful!",
@@ -141,7 +142,7 @@ export function MemberForm() {
             <FormItem>
               <FormLabel>Phone Number*</FormLabel>
               <FormControl>
-                <Input placeholder="+1 123 456 7890" {...field} />
+                <Input placeholder="+234 903 333 3333" {...field} />
               </FormControl>
               <FormMessage />
             </FormItem>
@@ -157,6 +158,42 @@ export function MemberForm() {
               <FormControl>
                 <Input type="email" placeholder="john.doe@example.com" {...field} />
               </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
+        <FormField
+          control={form.control}
+          name="address"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Address*</FormLabel>
+              <FormControl>
+                <Input placeholder="123 Main St, City, State, ZIP" {...field} />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
+        <FormField
+          control={form.control}
+          name="gender"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Gender*</FormLabel>
+              <Select onValueChange={field.onChange} defaultValue={field.value}>
+                <FormControl>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select your gender" />
+                  </SelectTrigger>
+                </FormControl>
+                <SelectContent>
+                  <SelectItem value="male">Male</SelectItem>
+                  <SelectItem value="female">Female</SelectItem>
+                </SelectContent>
+              </Select>
               <FormMessage />
             </FormItem>
           )}
