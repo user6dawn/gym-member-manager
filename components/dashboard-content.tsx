@@ -125,6 +125,23 @@ export default function DashboardContent({
     setFilteredMembers(result);
   }, [members, searchQuery, statusFilter, subscriptionFilter, sortOption]);
 
+  // Function to ensure proper image URL
+  const getImageUrl = (url: string | null) => {
+    if (!url) return undefined;
+    
+    // If it's already a full URL, return it
+    if (url.startsWith('http')) return url;
+    
+    // Check which bucket the image might be in
+    const buckets = ['gym.members'];
+    for (const bucket of buckets) {
+      const { data } = supabase.storage.from(bucket).getPublicUrl(url);
+      if (data?.publicUrl) return data.publicUrl;
+    }
+    
+    return url;
+  };
+
   const toggleMemberStatus = async (id: string, currentStatus: boolean) => {
     try {
       const { error } = await supabase
@@ -186,7 +203,7 @@ export default function DashboardContent({
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
-            placeholder="Search by name, phone, or email..."
+            placeholder="Search by name or phone..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="pl-9"
@@ -292,13 +309,13 @@ export default function DashboardContent({
       
       <Card className="overflow-hidden">
         <div className="bg-muted/50 p-4">
-          <div className="grid grid-cols-12 gap-4 text-sm font-medium text-muted-foreground">
-            <div className="col-span-1"></div>
-            <div className="col-span-3">Name</div>
-            <div className="col-span-2">Phone</div>
-            <div className="col-span-2 hidden md:block">Expiration</div>
-            <div className="col-span-2">Status</div>
-            <div className="col-span-2 text-right">Actions</div>
+          <div className="grid grid-cols-6 gap-4 text-sm font-medium text-muted-foreground">
+            <div className="flex items-center">Profile</div>
+            <div className="flex items-center">Name</div>
+            <div className="flex items-center">Phone</div>
+            <div className="flex items-center">Expiration</div>
+            <div className="flex items-center">Status</div>
+            <div className="flex items-center justify-end">Actions</div>
           </div>
         </div>
         
@@ -317,51 +334,53 @@ export default function DashboardContent({
               
               return (
                 <div key={member.id} className="p-4">
-                  <div className="grid grid-cols-12 gap-4 items-center">
-                    <div className="col-span-1">
-                      <Avatar>
-                        <AvatarImage src={member.image_url || undefined} alt={member.name} />
-                        <AvatarFallback>{getInitials(member.name)}</AvatarFallback>
-                      </Avatar>
-                    </div>
-                    
-                    <div className="col-span-3 truncate">
-                      <span className="font-medium">{member.name}</span>
-                      {member.email && (
-                        <div className="text-xs text-muted-foreground truncate">{member.email}</div>
-                      )}
-                    </div>
-                    
-                    <div className="col-span-2 text-sm truncate">{member.phone}</div>
-                    
-                    <div className="col-span-2 hidden md:block text-sm">
-                      {member.latestSubscription ? (
-                        format(
-                          new Date(member.latestSubscription.expiration_date), 
-                          'MMM d, yyyy'
-                        )
-                      ) : (
-                        <span className="text-muted-foreground">None</span>
-                      )}
-                    </div>
-                    
-                    <div className="col-span-2">
-                      <div className="flex items-center gap-4">
-                        <Badge variant={subscriptionStatus.variant}>
-                          {subscriptionStatus.status}
-                        </Badge>
-                        
-                        <div className="flex items-center">
-                          <Switch
-                            checked={member.status}
-                            onCheckedChange={() => toggleMemberStatus(member.id, member.status)}
-                            aria-label="Toggle status"
+                  <div className="grid grid-cols-6 gap-4 items-center">
+                    <div className="flex items-center">
+                      <div className="relative h-12 w-12 rounded-full overflow-hidden">
+                        {member.image_url && (
+                          <img
+                            src={getImageUrl(member.image_url)}
+                            alt={member.name}
+                            className="h-full w-full object-cover"
+                            onError={(e) => {
+                              const target = e.target as HTMLImageElement;
+                              target.style.display = 'none';
+                              const fallback = target.parentElement?.querySelector('.fallback') as HTMLDivElement;
+                              if (fallback) fallback.style.display = 'flex';
+                            }}
                           />
+                        )}
+                        <div 
+                          className={`fallback absolute inset-0 flex items-center justify-center bg-muted text-muted-foreground ${!member.image_url ? 'flex' : 'hidden'}`}
+                        >
+                          {getInitials(member.name)}
                         </div>
                       </div>
                     </div>
                     
-                    <div className="col-span-2 text-right">
+                    <div className="flex items-center">
+                      <span className="font-medium">{member.name}</span>
+                    </div>
+                    
+                    <div className="flex items-center">
+                      <span className="text-sm">{member.phone}</span>
+                    </div>
+                    
+                    <div className="flex items-center">
+                      <Badge variant={subscriptionStatus.variant}>
+                        {subscriptionStatus.status}
+                      </Badge>
+                    </div>
+
+                    <div className="flex items-center">
+                      <Switch
+                        checked={member.status}
+                        onCheckedChange={() => toggleMemberStatus(member.id, member.status)}
+                        aria-label="Toggle status"
+                      />
+                    </div>
+                    
+                    <div className="flex items-center justify-end">
                       <Link href={`/admin/user/${member.id}`}>
                         <Button variant="ghost" size="sm">
                           <Eye className="h-4 w-4 mr-1" />

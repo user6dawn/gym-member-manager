@@ -154,7 +154,7 @@ export default function UserProfile({
         
         const { error: uploadError, data } = await supabase
           .storage
-          .from('member-images')
+          .from('gym.members')
           .upload(filePath, file, { 
             upsert: true,
             cacheControl: '0',
@@ -165,10 +165,10 @@ export default function UserProfile({
         // Get the public URL
         const { data: { publicUrl } } = supabase
           .storage
-          .from('member-images')
+          .from('gym.members')
           .getPublicUrl(filePath);
 
-        console.log('New image URL:', publicUrl);
+
         
         // Update the user with the new image URL
         const { error: imageUpdateError } = await supabase
@@ -227,7 +227,7 @@ export default function UserProfile({
         // Upload the new image
         const { error: uploadError } = await supabase
           .storage
-          .from('member-images')
+          .from('gym.members')
           .upload(filePath, newImage, { upsert: true });
           
         if (uploadError) throw uploadError;
@@ -235,7 +235,7 @@ export default function UserProfile({
         // Get the public URL
         const { data: publicURLData } = supabase
           .storage
-          .from('member-images')
+          .from('gym.members')
           .getPublicUrl(filePath);
           
         // Update the user with the new image URL
@@ -417,8 +417,6 @@ export default function UserProfile({
   }, [user.id, supabase, router]);
 
   useEffect(() => {
-    console.log('Image URL:', user.image_url);
-    console.log('Image Preview:', imagePreview);
   }, [user.image_url, imagePreview]);
 
   return (
@@ -437,21 +435,23 @@ export default function UserProfile({
           <div className="flex items-start justify-between">
             <div className="flex items-center gap-4">
               <Avatar className="h-16 w-16 relative">
-                {user.image_url && (
+                {user.image_url ? (
                   <img 
                     src={user.image_url} 
                     alt={user.name}
-                    className="h-full w-full rounded-full object-cover"
-                    onLoad={() => console.log('Image loaded successfully')}
+                    className="h-full w-full object-cover"
                     onError={(e) => {
-                      console.error('Image failed to load:', user.image_url);
-                      e.currentTarget.style.display = 'none';
+                      const target = e.target as HTMLImageElement;
+                      target.style.display = 'none';
+                      const fallback = target.parentElement?.querySelector('.fallback') as HTMLDivElement;
+                      if (fallback) fallback.style.display = 'flex';
                     }}
                   />
+                ) : (
+                  <AvatarFallback className="text-lg">
+                    {getInitials(user.name)}
+                  </AvatarFallback>
                 )}
-                <AvatarFallback className="text-lg">
-                  {getInitials(user.name)}
-                </AvatarFallback>
               </Avatar>
               <div>
                 <CardTitle>{user.name}</CardTitle>
@@ -559,12 +559,23 @@ export default function UserProfile({
                     <FormLabel>Profile Picture</FormLabel>
                     <div className="flex items-center gap-4">
                       <Avatar className="h-16 w-16">
-                        <AvatarImage 
-                          src={imagePreview || user.image_url || undefined} 
-                          alt={user.name}
-                          className="object-cover"
-                        />
-                        <AvatarFallback className="text-lg">{getInitials(user.name)}</AvatarFallback>
+                        {imagePreview || user.image_url ? (
+                          <img 
+                            src={imagePreview || user.image_url!} 
+                            alt={user.name}
+                            className="h-full w-full object-cover"
+                            onError={(e) => {
+                              const target = e.target as HTMLImageElement;
+                              target.style.display = 'none';
+                              const fallback = target.parentElement?.querySelector('.fallback') as HTMLDivElement;
+                              if (fallback) fallback.style.display = 'flex';
+                            }}
+                          />
+                        ) : (
+                          <AvatarFallback className="text-lg fallback">
+                            {getInitials(user.name)}
+                          </AvatarFallback>
+                        )}
                       </Avatar>
                       <div>
                         <label htmlFor="profile-image" className="cursor-pointer">
