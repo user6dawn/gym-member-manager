@@ -35,7 +35,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover';
-import { format, isAfter, isBefore, parseISO } from 'date-fns';
+import { format, isAfter, isBefore, parseISO, addDays } from 'date-fns';
 
 type Member = {
   id: string;
@@ -44,10 +44,13 @@ type Member = {
   email: string | null;
   image_url: string | null;
   status: boolean;
-  latestSubscription: {
+  subscriptions: Array<{
+    id: string;
     payment_date: string;
     expiration_date: string;
-  } | null;
+    total_days: number;
+    active_days: number;
+  }>;
 };
 
 type SortOption = {
@@ -97,13 +100,15 @@ export default function DashboardContent({
       
       if (subscriptionFilter === 'active') {
         result = result.filter(member => 
-          member.latestSubscription && 
-          isAfter(new Date(member.latestSubscription.expiration_date), today)
+          member.subscriptions.some(sub => 
+            isAfter(new Date(sub.expiration_date), today)
+          )
         );
       } else if (subscriptionFilter === 'expired') {
         result = result.filter(member => 
-          !member.latestSubscription || 
-          isBefore(new Date(member.latestSubscription.expiration_date), today)
+          member.subscriptions.every(sub => 
+            isBefore(new Date(sub.expiration_date), today)
+          )
         );
       }
     }
@@ -115,8 +120,8 @@ export default function DashboardContent({
           ? a.name.localeCompare(b.name)
           : b.name.localeCompare(a.name);
       } else if (sortOption.field === 'expiration') {
-        const dateA = a.latestSubscription ? new Date(a.latestSubscription.expiration_date).getTime() : 0;
-        const dateB = b.latestSubscription ? new Date(b.latestSubscription.expiration_date).getTime() : 0;
+        const dateA = a.subscriptions[0]?.expiration_date ? new Date(a.subscriptions[0].expiration_date).getTime() : 0;
+        const dateB = b.subscriptions[0]?.expiration_date ? new Date(b.subscriptions[0].expiration_date).getTime() : 0;
         return sortOption.direction === 'asc' ? dateA - dateB : dateB - dateA;
       }
       return 0;
@@ -144,12 +149,35 @@ export default function DashboardContent({
 
   const toggleMemberStatus = async (id: string, currentStatus: boolean) => {
     try {
-      const { error } = await supabase
+      const { error: userError } = await supabase
         .from('users')
         .update({ status: !currentStatus })
         .eq('id', id);
       
-      if (error) throw error;
+      if (userError) throw userError;
+
+      // Find the member and their latest subscription
+      const member = members.find(m => m.id === id);
+      if (!member) throw new Error('Member not found');
+
+      if (currentStatus) { // If setting to inactive
+        const latestSubscription = member.subscriptions[0]; // Assuming subscriptions are ordered by date
+        if (latestSubscription) {
+          const today = new Date();
+          const startDate = new Date(latestSubscription.payment_date);
+          const daysSinceStart = Math.floor((today.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24));
+          
+          const { error: subError } = await supabase
+            .from('subscriptions')
+            .update({ 
+              active_days: daysSinceStart,
+              expiration_date: format(addDays(startDate, latestSubscription.total_days), 'yyyy-MM-dd')
+            })
+            .eq('id', latestSubscription.id);
+            
+          if (subError) throw subError;
+        }
+      }
       
       // Update the local state
       setMembers(members.map(member => 
@@ -179,19 +207,32 @@ export default function DashboardContent({
       .slice(0, 2);
   };
 
+  const calculateRemainingDays = (totalDays: number, activeDays: number) => {
+    return Math.max(0, totalDays - activeDays);
+  };
+
   const getSubscriptionStatus = (member: Member) => {
-    if (!member.latestSubscription) {
+    if (member.subscriptions.length === 0) {
       return { status: 'No subscription', variant: 'outline' as const };
     }
     
-    const expirationDate = new Date(member.latestSubscription.expiration_date);
+    const latestSubscription = member.subscriptions[0];
     const today = new Date();
-    const daysUntilExpiration = Math.ceil((expirationDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+    const expirationDate = new Date(latestSubscription.expiration_date);
+    const isExpired = isAfter(today, expirationDate);
     
-    if (daysUntilExpiration < 0) {
+    // Calculate active days from payment date until now if member is active
+    const paymentDate = new Date(latestSubscription.payment_date);
+    const currentActiveDays = member.status ? 
+      Math.floor((today.getTime() - paymentDate.getTime()) / (1000 * 60 * 60 * 24)) : 
+      0;
+    
+    const remainingDays = calculateRemainingDays(latestSubscription.total_days, currentActiveDays);
+    
+    if (isExpired || remainingDays === 0) {
       return { status: 'Expired', variant: 'destructive' as const };
-    } else if (daysUntilExpiration <= 7) {
-      return { status: `Expires in ${daysUntilExpiration} days`, variant: 'default' as const };
+    } else if (remainingDays <= 7) {
+      return { status: `Expires in ${remainingDays} days`, variant: 'default' as const };
     } else {
       return { status: 'Active', variant: 'outline' as const };
     }

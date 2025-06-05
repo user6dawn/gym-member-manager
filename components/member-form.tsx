@@ -67,15 +67,20 @@ export function MemberForm() {
         const { error: uploadError } = await supabase
           .storage
           .from('gym.members')
-          .upload(filePath, image);
+          .upload(filePath, image, {
+            cacheControl: '31536000',
+            upsert: true
+          });
 
         if (uploadError) throw uploadError;
 
-        // Get the public URL
+        // Get the public URL with no expiry
         const { data: publicURLData } = supabase
           .storage
           .from('gym.members')
-          .getPublicUrl(filePath);
+          .getPublicUrl(filePath, {
+            download: false,
+          });
 
         imageUrl = publicURLData.publicUrl;
       }
@@ -90,6 +95,7 @@ export function MemberForm() {
           address: values.address,
           gender: values.gender,
           image_url: imageUrl,
+          status: false, // Set default status to inactive
         });
 
       if (userError) throw userError;

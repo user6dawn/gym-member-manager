@@ -1,0 +1,127 @@
+🧱 Recommended Tech Stack
+✅ Frontend (Client Side)
+Framework: Next.js (App Router) — fast, SEO-friendly, and full-stack capable.
+
+UI Library: Tailwind CSS — highly customizable, responsive UI with clean design.
+
+Component System: Shadcn/UI — for beautiful prebuilt components like tables, modals, inputs.
+
+Form Management: react-hook-form + zod for validation.
+
+✅ Backend / API / Auth
+Backend-as-a-Service: Supabase
+
+Database (PostgreSQL)
+
+File storage (for user images)
+
+Auth (admin login)
+
+Realtime and serverless functions (if needed)
+
+Alternative (if you want to host your own backend): Node.js + Express + PostgreSQL (but Supabase will save you time).
+
+✅ Database
+Supabase PostgreSQL
+
+Perfect for relational data like users & subscriptions.
+
+Includes Row Level Security (RLS) for fine-grained access control.
+
+✅ Image Upload
+Supabase Storage (best if using Supabase already)
+
+Alternatives: Cloudinary or UploadThing (with Next.js API routes)
+
+✅ Admin-Only Access
+Use Supabase Auth roles (e.g., restrict dashboard routes to logged-in admins).
+
+✅ Deployment
+Vercel (best for Next.js, supports server functions)
+
+Supabase (handles backend, DB, auth, and storage)
+
+🗂️ Folder Structure Example (Next.js App Router)
+bash
+Copy
+Edit
+/app
+  /admin
+    /login
+    /dashboard
+    /user/[id]
+  /form (public gym member form)
+  /api (for custom endpoints if needed)
+/components
+  Header.jsx, Table.jsx, Filters.jsx, Modals.jsx
+/lib
+  supabaseClient.js
+  utils.js
+🛡️ Security Considerations
+Use Supabase RLS to ensure only admins can:
+
+View all users
+
+Edit or delete
+
+Access subscription data
+
+Never expose sensitive keys on client side.
+
+Validate all inputs (client and server).
+
+
+| Layer        | Tool                     | Notes                                        |
+| ------------ | ------------------------ | -------------------------------------------- |
+| **Frontend** | Next.js (App Router)     | For routing, server-side logic, and UI       |
+| **UI**       | Tailwind CSS + Shadcn/UI | Clean design with built-in components        |
+| **Forms**    | React Hook Form + Zod    | Handles member & admin forms                 |
+| **Backend**  | Supabase (only)          | Handles DB, Auth, File Storage, and APIs     |
+| **Storage**  | Supabase Storage         | For user profile images                      |
+| **Auth**     | Supabase Auth            | Only the admin can log in and manage records |
+
+
+user table
+| Column       | Type      | Notes                           |
+| ------------ | --------- | ------------------------------- |
+| `id`         | UUID      | Primary Key (auto-gen)          |
+| `name`       | Text      | Required                        |
+| `email`      | Text      | Optional                        |
+| `phone`      | Text      | Required                        |
+| `image_url`  | Text      | Optional - stored in Supabase   |
+| `status`     | Boolean   | Active = true, Inactive = false |
+| `created_at` | Timestamp | Default: now()                  |
+
+
+sub table
+| Column            | Type      | Notes                                               |
+| ----------------- | --------- | --------------------------------------------------- |
+| `id`              | UUID      | Primary Key                                         |
+| `user_id`         | UUID      | Foreign key to `users.id`                           |
+| `payment_date`    | Date      | From calendar input                                 |
+| `expiration_date` | Date      | From calendar input                                 |
+| `status`          | Text      | `active` or `expired` (computed in app or function) |
+| `created_at`      | Timestamp | Default: now()                                      |
+
+
+
+small discription
+it is a platform for record keeping of gym member details, there would be a login page for the admin but it would be a normal
+form for the members of the gym. the admin would be able to be authed in through a login up page. the admin on the other hand would
+be able to do the following, search for a person, filter through search and the filter drop would contain the items on the form, would be able to filter. the top of the page would be a search bar to search through the page, and next to it would be a filter, and a header.
+and sort through the information.
+
+then underneath it would be a table displaying the form information(image, name, phone number, and the expiring date for it), on click would open a different page about the user information. on this page would have the user details form and underneath it would be a form that the admin would be able to enter the date of payment through a calender and the date of expiration through a calender, underneath it would have a table with the date of there subscription and the day it would expire of days 
+
+the user details include name, image, phone number, email, a uuid(generated), there would be 2 database tables, one for user and one for user subs payment date, and next expiring date or expired in plain text. the user would also have an active or in active button controlled by the admin.
+
+gym member tracker
+
+the active should be after they pay, it would determine if the day runs
+system generated recipts, pause activity, type of subscription, So that's most of it's the cause you remember you said you wanted You wanted the activity to show after the payments like when when it is active you wanted it to show
+
+gym.members bucket name, 
+
+and on hover would show the date of subscription and expiring date and of there payment date and there payment amount, and you can hover over a date in the calender to and click and unclick, that would serve as a marker to show they have paid, underneath there detail and the calender would be a date that 
+
+

@@ -157,17 +157,18 @@ export default function UserProfile({
           .from('gym.members')
           .upload(filePath, file, { 
             upsert: true,
-            cacheControl: '0',
+            cacheControl: '31536000'
           });
           
         if (uploadError) throw uploadError;
         
-        // Get the public URL
+        // Get the public URL with no expiry
         const { data: { publicUrl } } = supabase
           .storage
           .from('gym.members')
-          .getPublicUrl(filePath);
-
+          .getPublicUrl(filePath, {
+            download: false
+          });
 
         
         // Update the user with the new image URL
@@ -228,15 +229,20 @@ export default function UserProfile({
         const { error: uploadError } = await supabase
           .storage
           .from('gym.members')
-          .upload(filePath, newImage, { upsert: true });
+          .upload(filePath, newImage, { 
+            upsert: true,
+            cacheControl: '31536000'
+          });
           
         if (uploadError) throw uploadError;
         
-        // Get the public URL
+        // Get the public URL with no expiry
         const { data: publicURLData } = supabase
           .storage
           .from('gym.members')
-          .getPublicUrl(filePath);
+          .getPublicUrl(filePath, {
+            download: false
+          });
           
         // Update the user with the new image URL
         const { error: imageUpdateError } = await supabase
