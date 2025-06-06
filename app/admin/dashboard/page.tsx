@@ -49,9 +49,11 @@ export default async function DashboardPage() {
         </p>
       </div>
       
+      
       <Suspense fallback={<DashboardSkeleton />}>
         <DashboardContent initialMembers={processedMembers} />
       </Suspense>
     </div>
+    
   );
 }

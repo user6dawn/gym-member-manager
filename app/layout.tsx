@@ -7,7 +7,7 @@ import { ThemeProvider } from '@/components/theme-provider';
 const inter = Inter({ subsets: ['latin'] });
 
 export const metadata: Metadata = {
-  title: 'GymTrack - Member Management System',
+  title: 'Body Shake Fitness',
   description: 'A complete solution for tracking gym members and subscriptions',
 };
 
@@ -18,14 +18,21 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body className={`${inter.className} min-h-screen bg-background`}>
+      <head>
+        <link rel="icon" href="/images/bodyshakefitnesslogo.png" />
+        <link rel="shortcut icon" href="/images/bodyshakefitnesslogo.png" />
+        <link rel="apple-touch-icon" href="/images/bodyshakefitnesslogo.png" />
+      </head>
+      <body className={`${inter.className} min-h-screen bg-background flex flex-col items-center justify-between`}>
         <ThemeProvider
           attribute="class"
           defaultTheme="light"
           enableSystem
           disableTransitionOnChange
         >
-          {children}
+          <main className="flex-1 w-full max-w-7xl mx-auto">
+            {children}
+          </main>
           <Toaster />
         </ThemeProvider>
       </body>

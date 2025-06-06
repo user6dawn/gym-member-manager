@@ -1,29 +1,36 @@
 import Link from 'next/link';
+import Image from 'next/image';
 import { Button } from '@/components/ui/button';
-import { Dumbbell } from 'lucide-react';
 
 export default function Home() {
   return (
-    <div className="flex flex-col min-h-screen">
-      <header className="border-b">
-        <div className="container mx-auto px-4 py-4 flex justify-between items-center">
-          <div className="flex items-center gap-2">
-            <Dumbbell className="h-6 w-6 text-primary" />
-            <span className="text-xl font-bold">GymTrack</span>
-          </div>
-          <nav>
-            <Link href="/admin/login">
-              <Button variant="ghost">Admin Login</Button>
-            </Link>
-          </nav>
+    <div className="flex flex-col min-h-screen w-full">
+      <header className="w-full border-b">
+        <div className="max-w-7xl mx-auto px-4 lg:px-6 h-14 flex items-center">
+          <Link href="/" className="flex items-center space-x-2">
+            <Image 
+              src="/images/bodyshakefitnesslogo.png"
+              alt="BodyShake Fitness"
+              width={100}
+              height={24}
+              className="text-primary"
+            />
+            <span className="font-bold text-2xl pt-2" style={{ color: '#a0d20d' }}>Body Shake Fitness</span>
+          </Link>
         </div>
       </header>
       
       <main className="flex-1 flex flex-col items-center justify-center p-6">
         <div className="max-w-3xl w-full text-center space-y-6">
-          <Dumbbell className="h-16 w-16 mx-auto text-primary" />
+          <Image 
+            src="/images/bodyshakefitnesslogo.png"
+            alt="BodyShake Fitness"
+            width={180}
+            height={64}
+            className="mx-auto text-primary"
+          />
           <h1 className="text-4xl md:text-5xl font-bold tracking-tight">
-            GymTrack Member System
+            Body Shake Fitness
           </h1>
           <p className="text-xl text-muted-foreground">
             Efficiently manage gym memberships, track subscriptions, and maintain member records.
@@ -42,12 +49,6 @@ export default function Home() {
           </div>
         </div>
       </main>
-      
-      <footer className="border-t py-6">
-        <div className="container mx-auto px-4 text-center text-sm text-muted-foreground">
-          © {new Date().getFullYear()} GymTrack. All rights reserved.
-        </div>
-      </footer>
     </div>
   );
 }

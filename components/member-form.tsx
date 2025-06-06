@@ -176,7 +176,7 @@ export function MemberForm() {
             <FormItem>
               <FormLabel>Address*</FormLabel>
               <FormControl>
-                <Input placeholder="123 Main St, City, State, ZIP" {...field} />
+                <Input placeholder="123 Main St, aja, lagos" {...field} />
               </FormControl>
               <FormMessage />
             </FormItem>
@@ -206,7 +206,7 @@ export function MemberForm() {
         />
         
         <div className="space-y-2">
-          <FormLabel>Profile Picture (Optional)</FormLabel>
+          <FormLabel>Profile Picture </FormLabel>
           <div className="flex items-center gap-4">
             {imagePreview && (
               <div className="w-20 h-20 rounded-full overflow-hidden border">

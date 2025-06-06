@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Dumbbell, LogOut, Menu, Search, X } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import Image from 'next/image';
 
 export default function AdminHeader() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -46,8 +47,14 @@ export default function AdminHeader() {
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-4">
             <Link href="/admin/dashboard" className="flex items-center space-x-2">
-              <Dumbbell className="h-6 w-6 text-primary" />
-              <span className="font-bold text-lg hidden sm:inline-block">GymTrack</span>
+              <Image 
+                src="/images/bodyshakefitnesslogo.png"
+                alt="BodyShake Fitness"
+                width={24}
+                height={24}
+                className="text-primary"
+              />
+              <span className="font-bold text-lg hidden sm:inline-block">Body Shake Fitness</span>
             </Link>
             
             <nav className="hidden md:flex items-center space-x-6">
