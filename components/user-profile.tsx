@@ -486,7 +486,7 @@ export default function UserProfile({
                       name="name"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Full Name 9</FormLabel>
+                          <FormLabel>Full Name</FormLabel>
                           <FormControl>
                             <Input {...field} />
                           </FormControl>

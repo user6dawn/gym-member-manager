@@ -35,7 +35,7 @@ export default function SuccessPage() {
                 Visit our website to learn more about us!
               </p>
               <a 
-                href="https://bodyshakefitnesscom" 
+                href="https://bodyshakefitness.com" 
                 target="_blank" 
                 rel="noopener noreferrer"
               >
@@ -54,7 +54,7 @@ export default function SuccessPage() {
             <p className="text-sm text-muted-foreground">
               © {new Date().getFullYear()} Body Shake Fitness. All rights reserved.
             </p>
-            <div className="flex items-center space-x-4">
+            {/* <div className="flex items-center space-x-4">
               <Link href="/" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
                 Home
               </Link>
@@ -64,7 +64,7 @@ export default function SuccessPage() {
               <Link href="/admin/login" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
                 Admin
               </Link>
-            </div>
+            </div> */}
           </div>
         </div>
       </footer>
