@@ -22,7 +22,7 @@ export default function MemberRegistrationPage() {
         <div className="max-w-7xl mx-auto py-6 px-4 text-center">
           <div className="flex flex-col items-center space-y-2">
             <p className="text-sm text-muted-foreground">
-              © {new Date().getFullYear()} Body Shake Fitness. All rights reserved.
+              © {new Date().getFullYear()} BodyShake Fitness Center. All rights reserved.
             </p>
             {/* <div className="flex items-center space-x-4">
               <Link href="/" className="text-sm text-muted-foreground hover:text-foreground transition-colors">

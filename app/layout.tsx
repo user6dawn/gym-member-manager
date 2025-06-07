@@ -7,7 +7,7 @@ import { ThemeProvider } from '@/components/theme-provider';
 const inter = Inter({ subsets: ['latin'] });
 
 export const metadata: Metadata = {
-  title: 'Body Shake Fitness',
+  title: 'BodyShake Fitness',
   description: 'A complete solution for tracking gym members and subscriptions',
 };
 

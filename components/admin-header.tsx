@@ -8,6 +8,7 @@ import { Dumbbell, LogOut, Menu, Search, X } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import Image from 'next/image';
+import { ThemeToggle } from '@/components/theme-toggle';
 
 export default function AdminHeader() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -54,7 +55,7 @@ export default function AdminHeader() {
                 height={24}
                 className="text-primary"
               />
-              <span className="font-bold text-lg hidden sm:inline-block">Body Shake Fitness</span>
+              <span className="font-bold text-lg hidden sm:inline-block">BodyShake Fitness Center</span>
             </Link>
             
             <nav className="hidden md:flex items-center space-x-6">
@@ -70,6 +71,7 @@ export default function AdminHeader() {
           </div>
           
           <div className="flex items-center space-x-4">
+            <ThemeToggle />
             <Button 
               variant="ghost" 
               size="icon" 

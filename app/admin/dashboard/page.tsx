@@ -2,6 +2,7 @@ import { createServerClient } from '@/lib/supabase/server';
 import DashboardContent from '@/components/dashboard-content';
 import { Suspense } from 'react';
 import { DashboardSkeleton } from '@/components/skeletons';
+import { ThemeToggle } from '@/components/theme-toggle';
 
 export const dynamic = 'force-static';
 export const revalidate = 0;
@@ -42,18 +43,19 @@ export default async function DashboardPage() {
 
   return (
     <div className="container mx-auto p-6">
-      <div className="mb-6">
-        <h1 className="text-3xl font-bold">Member Dashboard</h1>
-        <p className="text-muted-foreground">
-          Manage gym members and their subscriptions
-        </p>
+      <div className="mb-6 flex justify-between items-center">
+        <div>
+          <h1 className="text-3xl font-bold">Member Dashboard</h1>
+          <p className="text-muted-foreground">
+            Manage gym members and their subscriptions
+          </p>
+        </div>
+        <ThemeToggle />
       </div>
-      
       
       <Suspense fallback={<DashboardSkeleton />}>
         <DashboardContent initialMembers={processedMembers} />
       </Suspense>
     </div>
-    
   );
 }

@@ -44,6 +44,7 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { MemberStatusToggle } from '@/components/member-status-toggle';
+import { ThemeToggle } from '@/components/theme-toggle';
 
 type UserType = {
   id: string;
@@ -416,13 +417,16 @@ export default function UserProfile({
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-2">
-        <Link href="/admin/dashboard">
-          <Button variant="ghost" size="icon">
-            <ArrowLeft className="h-4 w-4" />
-          </Button>
-        </Link>
-        <h1 className="text-2xl font-bold">Member Details</h1>
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Link href="/admin/dashboard">
+            <Button variant="ghost" size="icon">
+              <ArrowLeft className="h-4 w-4" />
+            </Button>
+          </Link>
+          <h1 className="text-2xl font-bold">Member Details</h1>
+        </div>
+        <ThemeToggle />
       </div>
 
       <Card>

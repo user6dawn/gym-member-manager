@@ -10,12 +10,12 @@ export default function Home() {
           <Link href="/" className="flex items-center space-x-2">
             <Image 
               src="/images/bodyshakefitnesslogo.png"
-              alt="BodyShake Fitness"
+              alt="BodyShake Fitness Center"
               width={100}
               height={24}
               className="text-primary"
             />
-            <span className="font-bold text-2xl pt-2" style={{ color: '#a0d20d' }}>Body Shake Fitness</span>
+            <span className="font-bold text-2xl pt-2" style={{ color: '#a0d20d' }}>BodyShake Fitness Center</span>
           </Link>
         </div>
       </header>
@@ -24,13 +24,13 @@ export default function Home() {
         <div className="max-w-3xl w-full text-center space-y-6">
           <Image 
             src="/images/bodyshakefitnesslogo.png"
-            alt="BodyShake Fitness"
+            alt="BodyShake Fitness Center"
             width={180}
             height={64}
             className="mx-auto text-primary"
           />
           <h1 className="text-4xl md:text-5xl font-bold tracking-tight">
-            Body Shake Fitness
+            BodyShake Fitness Center
           </h1>
           <p className="text-xl text-muted-foreground">
             Efficiently manage gym memberships, track subscriptions, and maintain member records.
