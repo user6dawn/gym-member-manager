@@ -35,7 +35,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover';
-import { format, isAfter, isBefore, parseISO, addDays } from 'date-fns';
+import { format, isAfter, isBefore, parseISO, addDays, differenceInDays } from 'date-fns';
 
 type Member = {
   id: string;
@@ -50,6 +50,9 @@ type Member = {
     expiration_date: string;
     total_days: number;
     active_days: number;
+    inactive_days: number;
+    inactive_start_date: string | null;
+    days_remaining: number | null;
   }>;
 };
 
@@ -147,57 +150,6 @@ export default function DashboardContent({
     return url;
   };
 
-  const toggleMemberStatus = async (id: string, currentStatus: boolean) => {
-    try {
-      const { error: userError } = await supabase
-        .from('users')
-        .update({ status: !currentStatus })
-        .eq('id', id);
-      
-      if (userError) throw userError;
-
-      // Find the member and their latest subscription
-      const member = members.find(m => m.id === id);
-      if (!member) throw new Error('Member not found');
-
-      if (currentStatus) { // If setting to inactive
-        const latestSubscription = member.subscriptions[0]; // Assuming subscriptions are ordered by date
-        if (latestSubscription) {
-          const today = new Date();
-          const startDate = new Date(latestSubscription.payment_date);
-          const daysSinceStart = Math.floor((today.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24));
-          
-          const { error: subError } = await supabase
-            .from('subscriptions')
-            .update({ 
-              active_days: daysSinceStart,
-              expiration_date: format(addDays(startDate, latestSubscription.total_days), 'yyyy-MM-dd')
-            })
-            .eq('id', latestSubscription.id);
-            
-          if (subError) throw subError;
-        }
-      }
-      
-      // Update the local state
-      setMembers(members.map(member => 
-        member.id === id ? { ...member, status: !currentStatus } : member
-      ));
-      
-      toast({
-        title: "Status updated",
-        description: `Member is now ${!currentStatus ? 'active' : 'inactive'}`,
-      });
-    } catch (error) {
-      console.error('Error updating member status:', error);
-      toast({
-        title: "Error updating status",
-        description: "Please try again later.",
-        variant: "destructive",
-      });
-    }
-  };
-
   const getInitials = (name: string) => {
     return name
       .split(' ')
@@ -225,17 +177,56 @@ export default function DashboardContent({
     const paymentDate = new Date(latestSubscription.payment_date);
     const currentActiveDays = member.status ? 
       Math.floor((today.getTime() - paymentDate.getTime()) / (1000 * 60 * 60 * 24)) : 
-      0;
+      latestSubscription.active_days;
     
     const remainingDays = calculateRemainingDays(latestSubscription.total_days, currentActiveDays);
     
     if (isExpired || remainingDays === 0) {
       return { status: 'Expired', variant: 'destructive' as const };
+    } else if (!member.status) {
+      return { status: 'Paused', variant: 'default' as const };
     } else if (remainingDays <= 7) {
       return { status: `Expires in ${remainingDays} days`, variant: 'default' as const };
     } else {
-      return { status: 'Active', variant: 'outline' as const };
+      return { status: 'Subscribed', variant: 'outline' as const };
     }
+  };
+
+  const getDaysLeftDisplay = (member: Member) => {
+    if (member.subscriptions.length === 0) {
+      return { text: 'No subscription', variant: 'outline' as const };
+    }
+    
+    const latestSubscription = member.subscriptions[0];
+    const today = new Date();
+    const expirationDate = new Date(latestSubscription.expiration_date);
+    
+    // If member is inactive and has remaining days
+    if (!member.status && latestSubscription.days_remaining !== null) {
+      return { 
+        text: `${latestSubscription.days_remaining} days`, 
+        variant: 'default' as const 
+      };
+    }
+    
+    // If subscription is expired
+    if (isAfter(today, expirationDate)) {
+      return { text: 'Expired', variant: 'destructive' as const };
+    }
+    
+    // For active members, show days until expiration
+    const daysLeft = differenceInDays(expirationDate, today);
+    if (daysLeft <= 7) {
+      return { 
+        text: `${daysLeft} days left`, 
+        variant: 'default' as const 
+      };
+    }
+    
+    return { 
+      text: `${daysLeft} days left`, 
+      variant: 'outline' as const 
+    };
   };
 
   return (
@@ -355,7 +346,7 @@ export default function DashboardContent({
             <div className="flex items-center">Name</div>
             <div className="flex items-center">Phone</div>
             <div className="flex items-center">Expiration</div>
-            <div className="flex items-center">Status</div>
+            <div className="flex items-center">Days Left</div>
             <div className="flex items-center justify-end">Actions</div>
           </div>
         </div>
@@ -372,31 +363,21 @@ export default function DashboardContent({
           <div className="divide-y">
             {filteredMembers.map((member) => {
               const subscriptionStatus = getSubscriptionStatus(member);
+              const daysLeft = getDaysLeftDisplay(member);
               
               return (
                 <div key={member.id} className="p-4">
                   <div className="grid grid-cols-6 gap-4 items-center">
                     <div className="flex items-center">
-                      <div className="relative h-12 w-12 rounded-full overflow-hidden">
-                        {member.image_url && (
-                          <img
-                            src={getImageUrl(member.image_url)}
-                            alt={member.name}
-                            className="h-full w-full object-cover"
-                            onError={(e) => {
-                              const target = e.target as HTMLImageElement;
-                              target.style.display = 'none';
-                              const fallback = target.parentElement?.querySelector('.fallback') as HTMLDivElement;
-                              if (fallback) fallback.style.display = 'flex';
-                            }}
-                          />
+                      <Avatar className="h-16 w-16">
+                        {member.image_url ? (
+                          <AvatarImage src={member.image_url} alt={member.name} className="object-cover" />
+                        ) : (
+                          <AvatarFallback className="text-lg">
+                            {getInitials(member.name)}
+                          </AvatarFallback>
                         )}
-                        <div 
-                          className={`fallback absolute inset-0 flex items-center justify-center bg-muted text-muted-foreground ${!member.image_url ? 'flex' : 'hidden'}`}
-                        >
-                          {getInitials(member.name)}
-                        </div>
-                      </div>
+                      </Avatar>
                     </div>
                     
                     <div className="flex items-center">
@@ -414,11 +395,9 @@ export default function DashboardContent({
                     </div>
 
                     <div className="flex items-center">
-                      <Switch
-                        checked={member.status}
-                        onCheckedChange={() => toggleMemberStatus(member.id, member.status)}
-                        aria-label="Toggle status"
-                      />
+                      <Badge variant={daysLeft.variant}>
+                        {daysLeft.text}
+                      </Badge>
                     </div>
                     
                     <div className="flex items-center justify-end">

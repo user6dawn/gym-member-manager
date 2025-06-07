@@ -43,6 +43,7 @@ import {
   User,
 } from 'lucide-react';
 import Link from 'next/link';
+import { MemberStatusToggle } from '@/components/member-status-toggle';
 
 type UserType = {
   id: string;
@@ -63,6 +64,9 @@ type SubscriptionType = {
   expiration_date: string;
   total_days: number;
   active_days: number;
+  inactive_days: number;
+  inactive_start_date: string | null;
+  days_remaining: number | null;
   created_at: string;
 };
 
@@ -104,6 +108,7 @@ export default function UserProfile({
   const [newImage, setNewImage] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(user.image_url);
   const [isSubscriptionDialogOpen, setIsSubscriptionDialogOpen] = useState(false);
+  const [currentStatus, setCurrentStatus] = useState(user.status);
   
   const router = useRouter();
   const { toast } = useToast();
@@ -115,7 +120,7 @@ export default function UserProfile({
       name: user.name,
       phone: user.phone,
       email: user.email || '',
-      status: user.status,
+      status: currentStatus,
       address: user.address || '',
       gender: user.gender || '',
     },
@@ -200,6 +205,16 @@ export default function UserProfile({
     }
   };
 
+  // Update the handleStatusChange function
+  const handleStatusChange = (newStatus: boolean) => {
+    setCurrentStatus(newStatus);
+    userForm.setValue('status', newStatus, {
+      shouldDirty: true,
+      shouldTouch: true,
+      shouldValidate: true
+    });
+  };
+
   const onUserSubmit = async (values: z.infer<typeof userSchema>) => {
     try {
       setIsUpdating(true);
@@ -211,7 +226,6 @@ export default function UserProfile({
           name: values.name,
           phone: values.phone,
           email: values.email || null,
-          status: values.status,
           address: values.address || null,
           gender: values.gender || null,
         })
@@ -286,7 +300,7 @@ export default function UserProfile({
         initialActiveDays
       );
       
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from('subscriptions')
         .insert({
           user_id: user.id,
@@ -294,9 +308,21 @@ export default function UserProfile({
           expiration_date: format(calculatedExpirationDate, 'yyyy-MM-dd'),
           total_days: values.total_days,
           active_days: initialActiveDays,
-        });
+        })
+        .select()
+        .single();
         
       if (error) throw error;
+      
+      // Update user status to active if not already active
+      if (!user.status) {
+        const { error: statusError } = await supabase
+          .from('users')
+          .update({ status: true })
+          .eq('id', user.id);
+          
+        if (statusError) throw statusError;
+      }
       
       toast({
         title: "Subscription added",
@@ -310,7 +336,9 @@ export default function UserProfile({
       });
       
       setIsSubscriptionDialogOpen(false);
-      router.refresh();
+      
+      // Force a hard refresh to update the UI
+      window.location.reload();
     } catch (error) {
       console.error('Error adding subscription:', error);
       toast({
@@ -356,54 +384,6 @@ export default function UserProfile({
     }
   };
 
-  // Add function to handle status change
-  const handleStatusChange = async (newStatus: boolean) => {
-    try {
-      // Update user status
-      const { error: userError } = await supabase
-        .from('users')
-        .update({ status: newStatus })
-        .eq('id', user.id);
-
-      if (userError) throw userError;
-
-      // If user is being set to inactive, we need to update the subscription
-      if (!newStatus) {
-        const latestSubscription = subscriptions[0]; // Assuming subscriptions are ordered by date
-        if (latestSubscription) {
-          const today = new Date();
-          const startDate = new Date(latestSubscription.payment_date);
-          const daysSinceStart = Math.floor((today.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24));
-          
-          // Update active days in the subscription
-          const { error: subError } = await supabase
-            .from('subscriptions')
-            .update({ 
-              active_days: daysSinceStart,
-              expiration_date: format(addDays(startDate, latestSubscription.total_days), 'yyyy-MM-dd')
-            })
-            .eq('id', latestSubscription.id);
-            
-          if (subError) throw subError;
-        }
-      }
-
-      toast({
-        title: "Status updated",
-        description: `Member is now ${newStatus ? 'active' : 'inactive'}.`,
-      });
-
-      router.refresh();
-    } catch (error) {
-      console.error('Error updating status:', error);
-      toast({
-        title: "Error updating status",
-        description: "There was a problem updating the member status.",
-        variant: "destructive",
-      });
-    }
-  };
-
   // Add real-time subscription to status changes
   useEffect(() => {
     const channel = supabase
@@ -424,6 +404,15 @@ export default function UserProfile({
 
   useEffect(() => {
   }, [user.image_url, imagePreview]);
+
+  const getMemberStatus = () => {
+    if (!currentStatus) {
+      return subscriptions.length > 0 ? 
+        { text: 'Paused', variant: 'default' as const } : 
+        { text: 'Inactive', variant: 'destructive' as const };
+    }
+    return { text: 'Active', variant: 'outline' as const };
+  };
 
   return (
     <div className="space-y-6">
@@ -464,9 +453,14 @@ export default function UserProfile({
                 <CardDescription>Member since {format(new Date(user.created_at), 'MMMM d, yyyy')}</CardDescription>
               </div>
             </div>
-            <Badge variant={user.status ? 'outline' : 'destructive'}>
-              {user.status ? 'Active' : 'Inactive'}
-            </Badge>
+            {(() => {
+              const status = getMemberStatus();
+              return (
+                <Badge variant={status.variant}>
+                  {status.text}
+                </Badge>
+              );
+            })()}
           </div>
         </CardHeader>
         
@@ -479,7 +473,7 @@ export default function UserProfile({
             
             <TabsContent value="details" className="space-y-6 pt-4">
               <Form {...userForm}>
-                <form onSubmit={userForm.handleSubmit(onUserSubmit)} className="space-y-6">
+                <form className="space-y-6">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <FormField
                       control={userForm.control}
@@ -488,7 +482,7 @@ export default function UserProfile({
                         <FormItem>
                           <FormLabel>Full Name</FormLabel>
                           <FormControl>
-                            <Input {...field} />
+                            <Input {...field} disabled className="bg-muted/50" />
                           </FormControl>
                           <FormMessage />
                         </FormItem>
@@ -502,7 +496,7 @@ export default function UserProfile({
                         <FormItem>
                           <FormLabel>Phone Number</FormLabel>
                           <FormControl>
-                            <Input {...field} />
+                            <Input {...field} disabled className="bg-muted/50" />
                           </FormControl>
                           <FormMessage />
                         </FormItem>
@@ -516,7 +510,7 @@ export default function UserProfile({
                         <FormItem>
                           <FormLabel>Email Address</FormLabel>
                           <FormControl>
-                            <Input {...field} />
+                            <Input {...field} disabled className="bg-muted/50" />
                           </FormControl>
                           <FormMessage />
                         </FormItem>
@@ -530,7 +524,7 @@ export default function UserProfile({
                         <FormItem>
                           <FormLabel>Address</FormLabel>
                           <FormControl>
-                            <Input {...field} />
+                            <Input {...field} disabled className="bg-muted/50" />
                           </FormControl>
                           <FormMessage />
                         </FormItem>
@@ -544,7 +538,7 @@ export default function UserProfile({
                         <FormItem>
                           <FormLabel>Gender</FormLabel>
                           <FormControl>
-                            <Input {...field} />
+                            <Input {...field} disabled className="bg-muted/50" />
                           </FormControl>
                           <FormMessage />
                         </FormItem>
@@ -561,46 +555,7 @@ export default function UserProfile({
                     </div>
                   </div>
                   
-                  <div className="space-y-2">
-                    <FormLabel>Profile Picture</FormLabel>
-                    <div className="flex items-center gap-4">
-                      <Avatar className="h-16 w-16">
-                        {imagePreview || user.image_url ? (
-                          <img 
-                            src={imagePreview || user.image_url!} 
-                            alt={user.name}
-                            className="h-full w-full object-cover"
-                            onError={(e) => {
-                              const target = e.target as HTMLImageElement;
-                              target.style.display = 'none';
-                              const fallback = target.parentElement?.querySelector('.fallback') as HTMLDivElement;
-                              if (fallback) fallback.style.display = 'flex';
-                            }}
-                          />
-                        ) : (
-                          <AvatarFallback className="text-lg fallback">
-                            {getInitials(user.name)}
-                          </AvatarFallback>
-                        )}
-                      </Avatar>
-                      <div>
-                        <label htmlFor="profile-image" className="cursor-pointer">
-                          <div className="flex items-center gap-2 border rounded-md px-3 py-2 hover:bg-muted transition-colors">
-                            <Upload className="h-4 w-4" />
-                            <span>{imagePreview ? 'Change image' : 'Upload image'}</span>
-                          </div>
-                          <input 
-                            id="profile-image" 
-                            type="file" 
-                            accept="image/*" 
-                            className="hidden" 
-                            onChange={handleImageChange}
-                          />
-                        </label>
-                      </div>
-                    </div>
-                  </div>
-                  
+
                   <div className="flex items-center space-x-2">
                     <FormField
                       control={userForm.control}
@@ -608,12 +563,11 @@ export default function UserProfile({
                       render={({ field }) => (
                         <FormItem className="flex flex-row items-center space-x-2 space-y-0">
                           <FormControl>
-                            <Switch 
-                              checked={field.value} 
-                              onCheckedChange={(checked) => {
-                                field.onChange(checked);
-                                handleStatusChange(checked);
-                              }} 
+                            <MemberStatusToggle
+                              userId={user.id}
+                              isActive={field.value}
+                              latestSubscription={subscriptions[0]}
+                              onStatusChange={handleStatusChange}
                             />
                           </FormControl>
                           <FormLabel>Active Member</FormLabel>
@@ -621,17 +575,6 @@ export default function UserProfile({
                       )}
                     />
                   </div>
-                  
-                  <Button type="submit" disabled={isUpdating}>
-                    {isUpdating ? (
-                      <>
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        Updating...
-                      </>
-                    ) : (
-                      'Save Changes'
-                    )}
-                  </Button>
                 </form>
               </Form>
             </TabsContent>
