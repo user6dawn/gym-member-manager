@@ -48,6 +48,7 @@ import { ThemeToggle } from '@/components/theme-toggle';
 
 type UserType = {
   id: string;
+  member_id: number;
   name: string;
   phone: string;
   email: string | null;
@@ -95,6 +96,11 @@ const calculateRemainingDays = (totalDays: number, activeDays: number) => {
 const calculateActualExpirationDate = (paymentDate: Date, totalDays: number, activeDays: number) => {
   const remainingDays = calculateRemainingDays(totalDays, activeDays);
   return addDays(new Date(paymentDate), remainingDays);
+};
+
+// Add function to format member ID with leading zeros
+const formatMemberId = (id: number) => {
+  return id.toString().padStart(5, '0');
 };
 
 export default function UserProfile({
@@ -352,37 +358,85 @@ export default function UserProfile({
     }
   };
 
-  const getSubscriptionStatus = (subscription: SubscriptionType) => {
-    const today = new Date();
-    const expirationDate = new Date(subscription.expiration_date);
-    const isExpired = isAfter(today, expirationDate);
-    const remainingDays = calculateRemainingDays(
-      subscription.total_days,
-      subscription.active_days
-    );
-    
-    if (isExpired) {
+  const getSubscriptionStatus = async (subscription: SubscriptionType) => {
+    if (!subscription) {
       return { 
-        status: 'Expired', 
-        variant: 'destructive' as const, 
-        daysText: 'Expired',
-        activeText: `${subscription.active_days}/${subscription.total_days} days used`
-      };
-    } else if (remainingDays <= 7) {
-      return { 
-        status: 'Expiring Soon', 
-        variant: 'default' as const,
-        daysText: `${remainingDays} days left`,
-        activeText: `${subscription.active_days}/${subscription.total_days} days used`
-      };
-    } else {
-      return { 
-        status: 'Active', 
+        status: 'No subscription', 
         variant: 'outline' as const,
-        daysText: `${remainingDays} days left`,
-        activeText: `${subscription.active_days}/${subscription.total_days} days used`
+        daysText: 'No subscription',
+        activeText: '0/0 days left'
       };
     }
+    
+    const today = new Date();
+    const expirationDate = new Date(subscription.expiration_date);
+    const paymentDate = new Date(subscription.payment_date);
+    
+    // Calculate current active days if the member is active
+    if (user.status) {
+      const currentActiveDays = Math.floor((today.getTime() - paymentDate.getTime()) / (1000 * 60 * 60 * 24));
+      const newActiveDays = Math.min(currentActiveDays, subscription.total_days);
+      
+      // Only update if active days have changed
+      if (newActiveDays > subscription.active_days) {
+        try {
+          const { error: updateError } = await supabase
+            .from('subscriptions')
+            .update({ 
+              active_days: newActiveDays,
+            })
+            .eq('id', subscription.id);
+            
+          if (updateError) throw updateError;
+          
+          // Update the local subscription object
+          subscription.active_days = newActiveDays;
+        } catch (error) {
+          console.error('Error updating active days:', error);
+        }
+      }
+    }
+    
+    // Calculate remaining days considering both calendar days and active days
+    const calendarDaysLeft = differenceInDays(expirationDate, today);
+    const activeDaysLeft = subscription.total_days - subscription.active_days;
+    const effectiveDaysLeft = Math.min(calendarDaysLeft, activeDaysLeft);
+    
+    // If member is inactive and has remaining days
+    if (!user.status && subscription.days_remaining !== null) {
+      return { 
+        status: 'Paused',
+        variant: 'default' as const,
+        daysText: `${subscription.days_remaining} days`,
+        activeText: `${subscription.days_remaining}/${subscription.total_days} days left`
+      };
+    }
+    
+    // If subscription is expired or all days are used
+    if (isAfter(today, expirationDate) || subscription.active_days >= subscription.total_days) {
+      return { 
+        status: 'Expired',
+        variant: 'destructive' as const,
+        daysText: 'Expired',
+        activeText: `0/${subscription.total_days} days left`
+      };
+    }
+    
+    if (effectiveDaysLeft <= 7) {
+      return { 
+        status: 'Expiring Soon',
+        variant: 'default' as const,
+        daysText: `${effectiveDaysLeft} days left`,
+        activeText: `${effectiveDaysLeft}/${subscription.total_days} days left`
+      };
+    }
+    
+    return { 
+      status: 'Active',
+      variant: 'outline' as const,
+      daysText: `${effectiveDaysLeft} days left`,
+      activeText: `${effectiveDaysLeft}/${subscription.total_days} days left`
+    };
   };
 
   // Add real-time subscription to status changes
@@ -552,7 +606,7 @@ export default function UserProfile({
                     <div className="space-y-2">
                       <FormLabel>Member ID</FormLabel>
                       <Input 
-                        value={user.id} 
+                        value={formatMemberId(user.member_id)}
                         disabled 
                         className="bg-muted/50"
                       />
@@ -682,19 +736,43 @@ export default function UserProfile({
               ) : (
                 <div className="space-y-4">
                   {subscriptions.map((subscription) => {
-                    const status = getSubscriptionStatus(subscription);
-                    
+                    const [statusState, setStatusState] = useState<{
+                      status: string;
+                      variant: 'default' | 'destructive' | 'outline' | 'secondary';
+                      daysText: string;
+                      activeText: string;
+                    } | null>(null);
+
+                    useEffect(() => {
+                      let isMounted = true;
+
+                      const fetchStatus = async () => {
+                        const result = await getSubscriptionStatus(subscription);
+                        if (isMounted) {
+                          setStatusState(result);
+                        }
+                      };
+
+                      fetchStatus();
+
+                      return () => {
+                        isMounted = false;
+                      };
+                    }, [subscription]);
+
+                    if (!statusState) return null;
+
                     return (
                       <Card key={subscription.id}>
                         <CardContent className="p-4">
                           <div className="flex flex-col md:flex-row justify-between gap-4 md:items-center">
                             <div>
                               <div className="flex gap-2 items-center mb-1">
-                                <Badge variant={status.variant}>
-                                  {status.status}
+                                <Badge variant={statusState.variant}>
+                                  {statusState.status}
                                 </Badge>
                                 <span className="text-sm text-muted-foreground">
-                                  {status.daysText}
+                                  {statusState.daysText}
                                 </span>
                               </div>
                               <div className="flex gap-6 mt-2">
@@ -711,9 +789,9 @@ export default function UserProfile({
                                   </p>
                                 </div>
                                 <div>
-                                  <Label className="text-xs text-muted-foreground">Active Days</Label>
+                                  <Label className="text-xs text-muted-foreground">Days Remaining</Label>
                                   <p className="font-medium">
-                                    {status.activeText}
+                                    {statusState.activeText}
                                   </p>
                                 </div>
                               </div>

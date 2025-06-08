@@ -45,11 +45,11 @@ export default async function DashboardPage() {
     <div className="container mx-auto p-6">
       <div className="mb-6 flex justify-between items-center">
         <div>
-          <h1 className="text-3xl font-bold">Member Dashboard</h1>
-          <p className="text-muted-foreground">
-            Manage gym members and their subscriptions
-          </p>
-        </div>
+        <h1 className="text-3xl font-bold">Member Dashboard</h1>
+        <p className="text-muted-foreground">
+          Manage gym members and their subscriptions
+        </p>
+      </div>
         <ThemeToggle />
       </div>
       

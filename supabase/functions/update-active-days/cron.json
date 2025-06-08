@@ -1,0 +1,6 @@
+{
+  "cron": "0 0 * * *",
+  "function": "update-active-days",
+  "timeZone": "UTC",
+  "enabled": true
+} 
