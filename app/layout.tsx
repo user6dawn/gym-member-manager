@@ -6,9 +6,16 @@ import { ThemeProvider } from '@/components/theme-provider';
 
 const inter = Inter({ subsets: ['latin'] });
 
-export const metadata: Metadata = {
-  title: 'BodyShake Fitness',
-  description: 'A complete solution for tracking gym members and subscriptions',
+export const metadata = {
+  metadataBase: new URL('https://yoursite.com'),
+  alternates: {
+    canonical: '/',
+  },
+  viewport: {
+    width: 'device-width',
+    initialScale: 1,
+    maximumScale: 1,
+  },
 };
 
 export default function RootLayout({

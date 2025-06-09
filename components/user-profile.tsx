@@ -154,6 +154,7 @@ export default function UserProfile({
   const [imagePreview, setImagePreview] = useState<string | null>(user.image_url);
   const [isSubscriptionDialogOpen, setIsSubscriptionDialogOpen] = useState(false);
   const [currentStatus, setCurrentStatus] = useState(user.status);
+  const [isImageModalOpen, setIsImageModalOpen] = useState(false);
   
   const router = useRouter();
   const { toast } = useToast();
@@ -414,6 +415,30 @@ export default function UserProfile({
     return { text: 'Active', variant: 'outline' as const };
   };
 
+  const ImageModal = () => (
+    <Dialog open={isImageModalOpen} onOpenChange={setIsImageModalOpen}>
+      <DialogContent className="max-w-2xl p-0">
+        <div className="relative aspect-square">
+          {user.image_url ? (
+            <img 
+              src={user.image_url} 
+              alt={user.name}
+              className="w-full h-full object-cover"
+              onError={(e) => {
+                const target = e.target as HTMLImageElement;
+                target.style.display = 'none';
+              }}
+            />
+          ) : (
+            <div className="w-full h-full flex items-center justify-center bg-muted">
+              <User className="h-32 w-32 text-muted-foreground/50" />
+            </div>
+          )}
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -432,7 +457,10 @@ export default function UserProfile({
         <CardHeader>
           <div className="flex items-start justify-between">
             <div className="flex items-center gap-4">
-              <Avatar className="h-16 w-16 relative">
+              <Avatar 
+                className="h-16 w-16 relative cursor-pointer transition-transform hover:scale-105"
+                onClick={() => setIsImageModalOpen(true)}
+              >
                 {user.image_url ? (
                   <img 
                     src={user.image_url} 
@@ -754,6 +782,8 @@ export default function UserProfile({
           </Tabs>
         </CardContent>
       </Card>
+
+      <ImageModal />
     </div>
   );
 }

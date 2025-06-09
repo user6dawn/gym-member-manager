@@ -70,19 +70,14 @@ export function MemberStatusToggle({
 
         if (subError) throw new Error(subError.message);
       } else {
-        // Going active
-        if (!latestSubscription.inactive_start_date) {
-          toast({
-            title: "Invalid Resume",
-            description: "Inactive start date missing.",
-            variant: "destructive",
-          });
-          return;
-        }
-
-        const inactiveStart = new Date(latestSubscription.inactive_start_date);
+        // Going active - Modified this section
+        const inactiveStart = latestSubscription.inactive_start_date 
+          ? new Date(latestSubscription.inactive_start_date)
+          : new Date(latestSubscription.created_at); // Fallback to created_at
+        
         const daysInactive = differenceInDays(today, inactiveStart);
-        const newInactiveDays = latestSubscription.inactive_days + daysInactive;
+        const newInactiveDays = latestSubscription.inactive_days + 
+          (latestSubscription.inactive_start_date ? daysInactive : 0); // Only add if was inactive
 
         const { error: subError } = await supabase
           .from("subscriptions")

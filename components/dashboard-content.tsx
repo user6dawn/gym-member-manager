@@ -46,6 +46,7 @@ type Member = {
   status: boolean;
   subscriptions: Array<{
     id: string;
+    created_at: string;
     payment_date: string;
     expiration_date: string;
     total_days: number;
@@ -53,6 +54,7 @@ type Member = {
     inactive_days: number;
     inactive_start_date: string | null;
     days_remaining: number | null;
+    last_active_date: string | null;
   }>;
 };
 
@@ -193,39 +195,48 @@ export default function DashboardContent({
   };
 
   const getDaysLeftDisplay = (member: Member) => {
-    if (member.subscriptions.length === 0) {
-      return { text: 'No subscription', variant: 'outline' as const };
+    const subscription = member.subscriptions[0];
+    
+    if (!subscription) {
+      return { 
+        text: 'No subscription', 
+        variant: 'outline' as const
+      };
     }
-    
-    const latestSubscription = member.subscriptions[0];
-    const today = new Date();
-    const expirationDate = new Date(latestSubscription.expiration_date);
-    
+
     // If member is inactive and has remaining days
-    if (!member.status && latestSubscription.days_remaining !== null) {
+    if (!member.status && subscription.days_remaining !== null) {
       return { 
-        text: `${latestSubscription.days_remaining} days`, 
-        variant: 'default' as const 
+        text: `${subscription.days_remaining} days`, 
+        variant: 'default' as const
+      };
+    }
+
+    // Calculate remaining days using expiration date
+    const today = new Date();
+    const expirationDate = new Date(subscription.expiration_date);
+    const remainingDays = Math.ceil((expirationDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+    
+    // If subscription has expired
+    if (remainingDays <= 0) {
+      return { 
+        text: '0 days left', 
+        variant: 'destructive' as const
       };
     }
     
-    // If subscription is expired
-    if (isAfter(today, expirationDate)) {
-      return { text: 'Expired', variant: 'destructive' as const };
-    }
-    
-    // For active members, show days until expiration
-    const daysLeft = differenceInDays(expirationDate, today);
-    if (daysLeft <= 7) {
+    // If subscription is expiring soon
+    if (remainingDays <= 7) {
       return { 
-        text: `${daysLeft} days left`, 
-        variant: 'default' as const 
+        text: `${remainingDays} days left`, 
+        variant: 'default' as const
       };
     }
     
+    // Active subscription
     return { 
-      text: `${daysLeft} days left`, 
-      variant: 'outline' as const 
+      text: `${remainingDays} days left`, 
+      variant: 'outline' as const
     };
   };
 

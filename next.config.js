@@ -29,6 +29,12 @@ const nextConfig = {
   pageExtensions: ['tsx', 'ts', 'jsx', 'js'].filter(ext => 
     !ext.includes('supabase/functions')
   ),
+  experimental: {
+    // Enable route cache
+    routeCache: true,
+    // Enable parallel routes
+    parallelRoutes: true,
+  }
 };
 
 module.exports = nextConfig;
