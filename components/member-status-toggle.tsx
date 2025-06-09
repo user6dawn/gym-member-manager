@@ -3,18 +3,18 @@
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
 import { createClient } from "@/lib/supabase/client";
-import { format, addDays, isAfter, differenceInDays } from "date-fns";
+import { format, differenceInDays } from "date-fns";
 import { useRouter } from "next/navigation";
 
 type Subscription = {
   id: string;
-  payment_date: string;
-  expiration_date: string;
+  created_at: string;
   total_days: number;
   active_days: number;
   inactive_days: number;
   inactive_start_date: string | null;
   days_remaining: number | null;
+  last_active_date: string | null;
 };
 
 type MemberStatusToggleProps = {
@@ -30,116 +30,98 @@ export function MemberStatusToggle({
   isActive,
   latestSubscription,
   onStatusChange,
-  className
+  className,
 }: MemberStatusToggleProps) {
   const { toast } = useToast();
   const supabase = createClient();
   const router = useRouter();
 
-  const hasActiveSubscription = () => {
-    if (!latestSubscription) return false;
-    const today = new Date();
-    const expirationDate = new Date(latestSubscription.expiration_date);
-    return !isAfter(today, expirationDate);
-  };
-
   const handleStatusChange = async (newStatus: boolean) => {
     try {
-      console.log('Attempting to update status:', { userId, newStatus });
-
-      if (newStatus && !hasActiveSubscription() && !latestSubscription?.days_remaining) {
+      if (!latestSubscription) {
         toast({
-          title: "Cannot activate member",
-          description: "Member needs an active subscription to be activated.",
+          title: "No Subscription Found",
+          description: "Please create a subscription before activating the member.",
           variant: "destructive",
         });
         return;
       }
 
-      const { data, error: updateError } = await supabase
-        .from('users')
-        .update({ status: newStatus })
-        .eq('id', userId)
-        .select()
-        .maybeSingle();
+      const today = new Date();
+      const subscriptionId = latestSubscription.id;
 
-      if (updateError) {
-        console.error('Error updating user status:', updateError);
-        throw new Error(`Failed to update user status: ${updateError.message}`);
-      }
+      if (newStatus === false) {
+        // Going inactive
+        const lastActiveDate = latestSubscription.last_active_date
+          ? new Date(latestSubscription.last_active_date)
+          : new Date(latestSubscription.created_at);
+        const daysActiveNow = differenceInDays(today, lastActiveDate);
+        const newActiveDays = latestSubscription.active_days + daysActiveNow;
+        const newDaysRemaining = latestSubscription.total_days - newActiveDays;
 
-      if (!data) {
-        throw new Error("Update was not applied");
-      }
+        const { error: subError } = await supabase
+          .from("subscriptions")
+          .update({
+            active_days: newActiveDays,
+            days_remaining: newDaysRemaining,
+            inactive_start_date: format(today, "yyyy-MM-dd"),
+          })
+          .eq("id", subscriptionId);
 
-      if (latestSubscription) {
-        const today = new Date();
-
-        if (!newStatus) {
-          // Going inactive
-          const currentExpiration = new Date(latestSubscription.expiration_date);
-          const remainingDays = differenceInDays(currentExpiration, today);
-
-          const { error: subError } = await supabase
-            .from('subscriptions')
-            .update({
-              inactive_start_date: today.toISOString(),
-              days_remaining: remainingDays
-            })
-            .eq('id', latestSubscription.id);
-
-          if (subError) {
-            console.error('Error updating subscription:', subError);
-            await supabase.from('users').update({ status: isActive }).eq('id', userId);
-            throw new Error(`Failed to update subscription: ${subError.message}`);
-          }
-        } else {
-          // Going active
-          if (latestSubscription.inactive_start_date && latestSubscription.days_remaining !== null) {
-            const inactiveStartDate = new Date(latestSubscription.inactive_start_date);
-            const daysInactive = differenceInDays(today, inactiveStartDate);
-            const newExpirationDate = addDays(today, latestSubscription.days_remaining);
-
-            const totalDays = latestSubscription.total_days;
-            const activeDays = totalDays - latestSubscription.days_remaining;
-            const newInactiveDays = latestSubscription.inactive_days + daysInactive;
-
-            const { error: subError } = await supabase
-              .from('subscriptions')
-              .update({
-                expiration_date: format(newExpirationDate, 'yyyy-MM-dd'),
-                inactive_start_date: null,
-                days_remaining: null,
-                active_days: activeDays,
-                inactive_days: newInactiveDays
-              })
-              .eq('id', latestSubscription.id);
-
-            if (subError) {
-              console.error('Error updating subscription:', subError);
-              await supabase.from('users').update({ status: isActive }).eq('id', userId);
-              throw new Error(`Failed to update subscription: ${subError.message}`);
-            }
-          }
+        if (subError) throw new Error(subError.message);
+      } else {
+        // Going active
+        if (!latestSubscription.inactive_start_date) {
+          toast({
+            title: "Invalid Resume",
+            description: "Inactive start date missing.",
+            variant: "destructive",
+          });
+          return;
         }
+
+        const inactiveStart = new Date(latestSubscription.inactive_start_date);
+        const daysInactive = differenceInDays(today, inactiveStart);
+        const newInactiveDays = latestSubscription.inactive_days + daysInactive;
+
+        const { error: subError } = await supabase
+          .from("subscriptions")
+          .update({
+            inactive_days: newInactiveDays,
+            inactive_start_date: null,
+            last_active_date: format(today, "yyyy-MM-dd"),
+          })
+          .eq("id", subscriptionId);
+
+        if (subError) throw new Error(subError.message);
       }
+
+      // Update user status
+      const { error: userError } = await supabase
+        .from("users")
+        .update({ status: newStatus })
+        .eq("id", userId);
+
+      if (userError) throw new Error(userError.message);
+
+      toast({
+        title: "Status Updated",
+        description: `Member is now ${newStatus ? "active" : "inactive"}.`,
+      });
 
       onStatusChange?.(newStatus);
-
-      toast({
-        title: "Status updated",
-        description: `Member is now ${newStatus ? 'active' : 'inactive'}.`,
-      });
-
       router.refresh();
     } catch (error) {
-      console.error('Error in handleStatusChange:', error);
+      console.error("Toggle error:", error);
       toast({
-        title: "Error updating status",
-        description: error instanceof Error ? error.message : "There was a problem updating the member status.",
+        title: "Error",
+        description:
+          error instanceof Error
+            ? error.message
+            : "Failed to update member status.",
         variant: "destructive",
       });
-      onStatusChange?.(isActive);
+      onStatusChange?.(isActive); // revert UI switch
     }
   };
 
@@ -149,7 +131,6 @@ export function MemberStatusToggle({
       onCheckedChange={handleStatusChange}
       className={className}
       aria-label="Toggle member status"
-      disabled={isActive ? false : (!hasActiveSubscription() && !latestSubscription?.days_remaining)}
     />
   );
 }

@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { format, isAfter, differenceInDays, addDays } from 'date-fns';
+import { format } from 'date-fns';
 import { createClient } from '@/lib/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 
@@ -61,15 +61,13 @@ type UserType = {
 
 type SubscriptionType = {
   id: string;
-  user_id: string;
-  payment_date: string;
-  expiration_date: string;
+  created_at: string;
   total_days: number;
   active_days: number;
   inactive_days: number;
   inactive_start_date: string | null;
   days_remaining: number | null;
-  created_at: string;
+  last_active_date: string | null;
 };
 
 const userSchema = z.object({
@@ -82,21 +80,61 @@ const userSchema = z.object({
 });
 
 const subscriptionSchema = z.object({
-  payment_date: z.date({ required_error: 'Payment date is required' }),
+  start_date: z.date({ required_error: 'Start date is required' }),
   total_days: z.number().min(1, { message: 'Total days must be at least 1' }),
-  active_days: z.number().default(0),
 });
 
-// Add utility function for calculating remaining days
-const calculateRemainingDays = (totalDays: number, activeDays: number) => {
-  return Math.max(0, totalDays - activeDays);
+// Add function to calculate subscription status
+const getSubscriptionStatus = (subscription: SubscriptionType) => {
+  if (!subscription) {
+    return { 
+      status: 'No subscription', 
+      variant: 'outline' as const,
+      daysText: 'No subscription',
+      activeText: '0/0 days left'
+    };
+  }
+
+  // If member is inactive and has remaining days
+  if (subscription.days_remaining !== null) {
+    return { 
+      status: 'Paused',
+      variant: 'default' as const,
+      daysText: `${subscription.days_remaining} days`,
+      activeText: `${subscription.days_remaining}/${subscription.total_days} days left`
+    };
+  }
+
+  const remainingDays = subscription.total_days - subscription.active_days;
+  
+  // If all days are used
+  if (subscription.active_days >= subscription.total_days) {
+    return { 
+      status: 'Expired',
+      variant: 'destructive' as const,
+      daysText: 'Expired',
+      activeText: `0/${subscription.total_days} days left`
+    };
+  }
+  
+  if (remainingDays <= 7) {
+    return { 
+      status: 'Expiring Soon',
+      variant: 'default' as const,
+      daysText: `${remainingDays} days left`,
+      activeText: `${remainingDays}/${subscription.total_days} days left`
+    };
+  }
+  
+  return { 
+    status: 'Active',
+    variant: 'outline' as const,
+    daysText: `${remainingDays} days left`,
+    activeText: `${remainingDays}/${subscription.total_days} days left`
+  };
 };
 
-// Add function to calculate actual expiration date based on active days
-const calculateActualExpirationDate = (paymentDate: Date, totalDays: number, activeDays: number) => {
-  const remainingDays = calculateRemainingDays(totalDays, activeDays);
-  return addDays(new Date(paymentDate), remainingDays);
-};
+
 
 // Add function to format member ID with leading zeros
 const formatMemberId = (id: number) => {
@@ -136,9 +174,8 @@ export default function UserProfile({
   const subscriptionForm = useForm<z.infer<typeof subscriptionSchema>>({
     resolver: zodResolver(subscriptionSchema),
     defaultValues: {
-      payment_date: new Date(),
+      start_date: new Date(),
       total_days: 30,
-      active_days: 0,
     },
   });
 
@@ -296,25 +333,15 @@ export default function UserProfile({
     try {
       setIsAddingSubscription(true);
       
-      // If user is active, calculate active days from payment date until now
-      const initialActiveDays = user.status ? 
-        Math.floor((new Date().getTime() - values.payment_date.getTime()) / (1000 * 60 * 60 * 24)) : 
-        0;
-      
-      const calculatedExpirationDate = calculateActualExpirationDate(
-        values.payment_date,
-        values.total_days,
-        initialActiveDays
-      );
-      
       const { data, error } = await supabase
         .from('subscriptions')
         .insert({
           user_id: user.id,
-          payment_date: format(values.payment_date, 'yyyy-MM-dd'),
-          expiration_date: format(calculatedExpirationDate, 'yyyy-MM-dd'),
+          created_at: format(values.start_date, 'yyyy-MM-dd'),
           total_days: values.total_days,
-          active_days: initialActiveDays,
+          active_days: 0,
+          inactive_days: 0,
+          last_active_date: user.status ? format(values.start_date, 'yyyy-MM-dd') : null
         })
         .select()
         .single();
@@ -337,9 +364,8 @@ export default function UserProfile({
       });
       
       subscriptionForm.reset({
-        payment_date: new Date(),
+        start_date: new Date(),
         total_days: 30,
-        active_days: 0,
       });
       
       setIsSubscriptionDialogOpen(false);
@@ -356,87 +382,6 @@ export default function UserProfile({
     } finally {
       setIsAddingSubscription(false);
     }
-  };
-
-  const getSubscriptionStatus = async (subscription: SubscriptionType) => {
-    if (!subscription) {
-      return { 
-        status: 'No subscription', 
-        variant: 'outline' as const,
-        daysText: 'No subscription',
-        activeText: '0/0 days left'
-      };
-    }
-    
-    const today = new Date();
-    const expirationDate = new Date(subscription.expiration_date);
-    const paymentDate = new Date(subscription.payment_date);
-    
-    // Calculate current active days if the member is active
-    if (user.status) {
-      const currentActiveDays = Math.floor((today.getTime() - paymentDate.getTime()) / (1000 * 60 * 60 * 24));
-      const newActiveDays = Math.min(currentActiveDays, subscription.total_days);
-      
-      // Only update if active days have changed
-      if (newActiveDays > subscription.active_days) {
-        try {
-          const { error: updateError } = await supabase
-            .from('subscriptions')
-            .update({ 
-              active_days: newActiveDays,
-            })
-            .eq('id', subscription.id);
-            
-          if (updateError) throw updateError;
-          
-          // Update the local subscription object
-          subscription.active_days = newActiveDays;
-        } catch (error) {
-          console.error('Error updating active days:', error);
-        }
-      }
-    }
-    
-    // Calculate remaining days considering both calendar days and active days
-    const calendarDaysLeft = differenceInDays(expirationDate, today);
-    const activeDaysLeft = subscription.total_days - subscription.active_days;
-    const effectiveDaysLeft = Math.min(calendarDaysLeft, activeDaysLeft);
-    
-    // If member is inactive and has remaining days
-    if (!user.status && subscription.days_remaining !== null) {
-      return { 
-        status: 'Paused',
-        variant: 'default' as const,
-        daysText: `${subscription.days_remaining} days`,
-        activeText: `${subscription.days_remaining}/${subscription.total_days} days left`
-      };
-    }
-    
-    // If subscription is expired or all days are used
-    if (isAfter(today, expirationDate) || subscription.active_days >= subscription.total_days) {
-      return { 
-        status: 'Expired',
-        variant: 'destructive' as const,
-        daysText: 'Expired',
-        activeText: `0/${subscription.total_days} days left`
-      };
-    }
-    
-    if (effectiveDaysLeft <= 7) {
-      return { 
-        status: 'Expiring Soon',
-        variant: 'default' as const,
-        daysText: `${effectiveDaysLeft} days left`,
-        activeText: `${effectiveDaysLeft}/${subscription.total_days} days left`
-      };
-    }
-    
-    return { 
-      status: 'Active',
-      variant: 'outline' as const,
-      daysText: `${effectiveDaysLeft} days left`,
-      activeText: `${effectiveDaysLeft}/${subscription.total_days} days left`
-    };
   };
 
   // Add real-time subscription to status changes
@@ -659,10 +604,10 @@ export default function UserProfile({
                       <form onSubmit={subscriptionForm.handleSubmit(onSubscriptionSubmit)} className="space-y-4">
                         <FormField
                           control={subscriptionForm.control}
-                          name="payment_date"
+                          name="start_date"
                           render={({ field }) => (
                             <FormItem className="flex flex-col">
-                              <FormLabel>Payment Date</FormLabel>
+                              <FormLabel>Start Date</FormLabel>
                               <Popover>
                                 <PopoverTrigger asChild>
                                   <FormControl>
@@ -747,7 +692,7 @@ export default function UserProfile({
                       let isMounted = true;
 
                       const fetchStatus = async () => {
-                        const result = await getSubscriptionStatus(subscription);
+                        const result = getSubscriptionStatus(subscription);
                         if (isMounted) {
                           setStatusState(result);
                         }
@@ -777,21 +722,23 @@ export default function UserProfile({
                               </div>
                               <div className="flex gap-6 mt-2">
                                 <div>
-                                  <Label className="text-xs text-muted-foreground">Payment Date</Label>
+                                  <Label className="text-xs text-muted-foreground">Start Date</Label>
                                   <p className="font-medium">
-                                    {format(new Date(subscription.payment_date), 'MMM d, yyyy')}
+                                    {format(new Date(subscription.created_at), 'MMM d, yyyy')}
                                   </p>
                                 </div>
                                 <div>
-                                  <Label className="text-xs text-muted-foreground">Expiration Date</Label>
+                                  <Label className="text-xs text-muted-foreground">Last Active</Label>
                                   <p className="font-medium">
-                                    {format(new Date(subscription.expiration_date), 'MMM d, yyyy')}
+                                    {subscription.last_active_date 
+                                      ? format(new Date(subscription.last_active_date), 'MMM d, yyyy')
+                                      : 'Never'}
                                   </p>
                                 </div>
                                 <div>
-                                  <Label className="text-xs text-muted-foreground">Days Remaining</Label>
+                                  <Label className="text-xs text-muted-foreground">Days Used</Label>
                                   <p className="font-medium">
-                                    {statusState.activeText}
+                                    {subscription.active_days}/{subscription.total_days} days
                                   </p>
                                 </div>
                               </div>
