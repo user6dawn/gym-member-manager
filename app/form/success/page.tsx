@@ -41,7 +41,7 @@ export default function SuccessPage() {
             </p>
             <div className="text-center space-y-1 text-base">
               <div>
-              <span className="font-semibold">Account Name:</span> nnaemeka chimereze onyeze
+              <span className="font-semibold">Account Name:</span> Nnaemeka Chimereze Onyeze
               </div>
               <div>
               <span className="font-semibold">Bank Name:</span> Opay

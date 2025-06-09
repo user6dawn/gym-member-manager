@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { format } from 'date-fns';
+import { format, addDays } from 'date-fns';
 import { createClient } from '@/lib/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 
@@ -334,15 +334,19 @@ export default function UserProfile({
     try {
       setIsAddingSubscription(true);
       
+      const formattedDate = format(values.start_date, 'yyyy-MM-dd');
+      
       const { data, error } = await supabase
         .from('subscriptions')
         .insert({
           user_id: user.id,
-          created_at: format(values.start_date, 'yyyy-MM-dd'),
+          created_at: formattedDate,
+          payment_date: formattedDate, // Add this line to set payment_date
+          expiration_date: format(addDays(values.start_date, values.total_days), 'yyyy-MM-dd'),
           total_days: values.total_days,
           active_days: 0,
           inactive_days: 0,
-          last_active_date: user.status ? format(values.start_date, 'yyyy-MM-dd') : null
+          last_active_date: user.status ? formattedDate : null
         })
         .select()
         .single();
