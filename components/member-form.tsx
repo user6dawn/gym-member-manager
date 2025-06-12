@@ -12,6 +12,7 @@ import { Loader2, Upload } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { createClient } from '@/lib/supabase/client';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { sendNewUserEmail } from '@/lib/email';
 
 const formSchema = z.object({
   name: z.string().min(2, { message: 'Name must be at least 2 characters.' }),
@@ -86,7 +87,7 @@ export function MemberForm() {
       }
 
       // Create the user with the image URL if available
-      const { error: userError } = await supabase
+      const { error: userError, data: newUser } = await supabase
         .from('users')
         .insert({
           name: values.name,
@@ -95,10 +96,25 @@ export function MemberForm() {
           address: values.address,
           gender: values.gender,
           image_url: imageUrl,
-          status: false, // Set default status to inactive
-        });
+          status: false,
+        })
+        .select()
+        .single();
 
       if (userError) throw userError;
+
+      // Send email notification
+      try {
+        await sendNewUserEmail({
+          userName: values.name,
+          userPhone: values.phone,
+          userEmail: values.email || undefined
+        });
+      } catch (emailError) {
+        console.error('Failed to send email notification:', emailError);
+        // Don't throw here - we don't want to affect the user experience
+        // if email sending fails
+      }
 
       toast({
         title: "Registration successful!",

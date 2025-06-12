@@ -68,6 +68,7 @@ type SubscriptionType = {
   inactive_start_date: string | null;
   days_remaining: number | null;
   last_active_date: string | null;
+  expiration_date: string; // Added property
 };
 
 const userSchema = z.object({
@@ -90,47 +91,46 @@ const getSubscriptionStatus = (subscription: SubscriptionType) => {
     return { 
       status: 'No subscription', 
       variant: 'outline' as const,
-      daysText: 'No subscription',
-      activeText: '0/0 days left'
+      daysText: 'No subscription'
     };
   }
 
-  // If member is inactive and has remaining days
+  const today = new Date();
+  const expirationDate = new Date(subscription.expiration_date);
+  const remainingDays = Math.ceil((expirationDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+
+  // If member has inactive days and remaining days
   if (subscription.days_remaining !== null) {
     return { 
       status: 'Paused',
       variant: 'default' as const,
-      daysText: `${subscription.days_remaining} days`,
-      activeText: `${subscription.days_remaining}/${subscription.total_days} days left`
+      daysText: `${subscription.days_remaining} days on hold`
     };
   }
 
-  const remainingDays = subscription.total_days - subscription.active_days;
-  
-  // If all days are used
-  if (subscription.active_days >= subscription.total_days) {
+  // If subscription has expired
+  if (remainingDays <= 0) {
     return { 
       status: 'Expired',
       variant: 'destructive' as const,
-      daysText: 'Expired',
-      activeText: `0/${subscription.total_days} days left`
+      daysText: 'Subscription expired'
     };
   }
   
+  // If less than or equal to 7 days remaining
   if (remainingDays <= 7) {
     return { 
       status: 'Expiring Soon',
       variant: 'default' as const,
-      daysText: `${remainingDays} days left`,
-      activeText: `${remainingDays}/${subscription.total_days} days left`
+      daysText: `${remainingDays} ${remainingDays === 1 ? 'day' : 'days'} remaining`
     };
   }
   
+  // Active with more than 7 days remaining
   return { 
     status: 'Active',
     variant: 'outline' as const,
-    daysText: `${remainingDays} days left`,
-    activeText: `${remainingDays}/${subscription.total_days} days left`
+    daysText: `${remainingDays} ${remainingDays === 1 ? 'day' : 'days'} remaining`
   };
 };
 
@@ -406,9 +406,6 @@ export default function UserProfile({
       supabase.removeChannel(channel);
     };
   }, [user.id, supabase, router]);
-
-  useEffect(() => {
-  }, [user.image_url, imagePreview]);
 
   const getMemberStatus = () => {
     if (!currentStatus) {
@@ -713,31 +710,10 @@ export default function UserProfile({
               ) : (
                 <div className="space-y-4">
                   {subscriptions.map((subscription) => {
-                    const [statusState, setStatusState] = useState<{
-                      status: string;
-                      variant: 'default' | 'destructive' | 'outline' | 'secondary';
-                      daysText: string;
-                      activeText: string;
-                    } | null>(null);
-
-                    useEffect(() => {
-                      let isMounted = true;
-
-                      const fetchStatus = async () => {
-                        const result = getSubscriptionStatus(subscription);
-                        if (isMounted) {
-                          setStatusState(result);
-                        }
-                      };
-
-                      fetchStatus();
-
-                      return () => {
-                        isMounted = false;
-                      };
-                    }, [subscription]);
-
-                    if (!statusState) return null;
+                    const statusState = getSubscriptionStatus(subscription);
+                    const today = new Date();
+                    const expirationDate = new Date(subscription.expiration_date);
+                    const remainingDays = Math.ceil((expirationDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
 
                     return (
                       <Card key={subscription.id}>
@@ -768,9 +744,13 @@ export default function UserProfile({
                                   </p>
                                 </div>
                                 <div>
-                                  <Label className="text-xs text-muted-foreground">Days Used</Label>
+                                  <Label className="text-xs text-muted-foreground">Days Left</Label>
                                   <p className="font-medium">
-                                    {subscription.active_days}/{subscription.total_days} days
+                                    {subscription.days_remaining !== null 
+                                      ? `${subscription.days_remaining} days`
+                                      : remainingDays <= 0 
+                                        ? '0 days'
+                                        : `${remainingDays} days`}
                                   </p>
                                 </div>
                               </div>
@@ -791,3 +771,4 @@ export default function UserProfile({
     </div>
   );
 }
+

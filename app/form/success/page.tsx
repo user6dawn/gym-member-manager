@@ -41,16 +41,16 @@ export default function SuccessPage() {
             </p>
             <div className="text-center space-y-1 text-base">
               <div>
-              <span className="font-semibold">Account Name:</span> Nnaemeka Chimereze Onyeze
+              <span className="font-semibold">Account Name:</span> Body Shake Fitness Gym
               </div>
               <div>
-              <span className="font-semibold">Bank Name:</span> Opay
+              <span className="font-semibold">Bank Name:</span> GT bank
               </div>
               <div className="flex items-center justify-center gap-2">
-              <span className="font-semibold">Account Number:</span> 7047219659
+              <span className="font-semibold">Account Number:</span> 0227232348
               <button
                 type="button"
-                onClick={() => navigator.clipboard.writeText('7047219659')}
+                onClick={() => navigator.clipboard.writeText('0227232348')}
                 className="ml-2 p-1 rounded hover:bg-muted transition-colors"
                 aria-label="Copy account number"
               >

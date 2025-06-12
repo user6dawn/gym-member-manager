@@ -70,14 +70,17 @@ export function MemberStatusToggle({
 
         if (subError) throw new Error(subError.message);
       } else {
-        // Going active - Modified this section
-        const inactiveStart = latestSubscription.inactive_start_date 
+        // Going active
+        const inactiveStart = latestSubscription.inactive_start_date
           ? new Date(latestSubscription.inactive_start_date)
-          : new Date(latestSubscription.created_at); // Fallback to created_at
-        
-        const daysInactive = differenceInDays(today, inactiveStart);
-        const newInactiveDays = latestSubscription.inactive_days + 
-          (latestSubscription.inactive_start_date ? daysInactive : 0); // Only add if was inactive
+          : null;
+        let daysInactive = 0;
+        if (inactiveStart) {
+          daysInactive = differenceInDays(today, inactiveStart);
+        }
+        const newInactiveDays = latestSubscription.inactive_days + daysInactive;
+        const newTotalDays = latestSubscription.total_days + daysInactive; // Extend total_days by days inactive
+        const newDaysRemaining = (latestSubscription.days_remaining ?? (latestSubscription.total_days - latestSubscription.active_days)) + daysInactive;
 
         const { error: subError } = await supabase
           .from("subscriptions")
@@ -85,6 +88,8 @@ export function MemberStatusToggle({
             inactive_days: newInactiveDays,
             inactive_start_date: null,
             last_active_date: format(today, "yyyy-MM-dd"),
+            total_days: newTotalDays,
+            days_remaining: newDaysRemaining,
           })
           .eq("id", subscriptionId);
 
