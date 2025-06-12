@@ -17,9 +17,10 @@ import { sendNewUserEmail } from '@/lib/email';
 const formSchema = z.object({
   name: z.string().min(2, { message: 'Name must be at least 2 characters.' }),
   phone: z.string().min(10, { message: 'Please enter a valid phone number.' }),
-  email: z.string().email({ message: 'Please enter a valid email.' }).optional().or(z.literal('')),
+  email: z.string().email({ message: 'Please enter a valid email.' }),  // Remove optional
   address: z.string().min(5, { message: 'Please enter a valid address.' }),
   gender: z.enum(['male', 'female'], { required_error: 'Please select a gender.' }),
+  image: z.any().refine((file) => file !== null, "Profile picture is required"), // Add image validation
 });
 
 export function MemberForm() {
@@ -38,6 +39,7 @@ export function MemberForm() {
       email: '',
       address: '',
       gender: undefined,
+      image: null,
     },
   });
 
@@ -56,6 +58,15 @@ export function MemberForm() {
   async function onSubmit(values: z.infer<typeof formSchema>) {
     try {
       setIsLoading(true);
+
+      if (!image) {
+        toast({
+          title: "Error",
+          description: "Please upload a profile picture",
+          variant: "destructive",
+        });
+        return;
+      }
 
       let imageUrl = null;
 
@@ -176,7 +187,7 @@ export function MemberForm() {
           name="email"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Email Address (Optional)</FormLabel>
+              <FormLabel>Email Address*</FormLabel>
               <FormControl>
                 <Input type="email" placeholder="john.doe@example.com" {...field} />
               </FormControl>
@@ -222,33 +233,45 @@ export function MemberForm() {
         />
         
         <div className="space-y-2">
-          <FormLabel>Profile Picture </FormLabel>
-          <div className="flex items-center gap-4">
-            {imagePreview && (
-              <div className="w-20 h-20 rounded-full overflow-hidden border">
-                <img 
-                  src={imagePreview} 
-                  alt="Profile preview" 
-                  className="w-full h-full object-cover"
-                />
-              </div>
-            )}
-            <div className="flex-1">
-              <label htmlFor="image-upload" className="cursor-pointer">
-                <div className="flex items-center gap-2 border rounded-md px-3 py-2 hover:bg-muted transition-colors">
-                  <Upload className="h-4 w-4" />
-                  <span>{image ? 'Change image' : 'Upload image'}</span>
+          <FormField
+            control={form.control}
+            name="image"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Profile Picture <br />use a picture of your <b>face</b>* </FormLabel>
+                <div className="flex items-center gap-4">
+                  {imagePreview && (
+                    <div className="w-20 h-20 rounded-full overflow-hidden border">
+                      <img 
+                        src={imagePreview} 
+                        alt="Profile preview" 
+                        className="w-full h-full object-cover"
+                      />
+                    </div>
+                  )}
+                  <div className="flex-1">
+                    <label htmlFor="image-upload" className="cursor-pointer">
+                      <div className="flex items-center gap-2 border rounded-md px-3 py-2 hover:bg-muted transition-colors">
+                        <Upload className="h-4 w-4" />
+                        <span>{image ? 'Change image' : 'Upload image*'}</span>
+                      </div>
+                      <input 
+                        id="image-upload" 
+                        type="file" 
+                        accept="image/*" 
+                        className="hidden" 
+                        onChange={(e) => {
+                          handleImageChange(e);
+                          field.onChange(e.target.files?.[0] || null);
+                        }}
+                      />
+                    </label>
+                  </div>
                 </div>
-                <input 
-                  id="image-upload" 
-                  type="file" 
-                  accept="image/*" 
-                  className="hidden" 
-                  onChange={handleImageChange}
-                />
-              </label>
-            </div>
-          </div>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
         </div>
         
         <Button type="submit" className="w-full" disabled={isLoading}>

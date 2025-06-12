@@ -35,6 +35,13 @@ import {
   PopoverTrigger,
 } from '@/components/ui/popover';
 import {
+  Select,
+  SelectTrigger,
+  SelectValue,
+  SelectContent,
+  SelectItem,
+} from '@/components/ui/select';
+import {
   ArrowLeft,
   Calendar as CalendarIcon,
   Loader2,
@@ -155,6 +162,7 @@ export default function UserProfile({
   const [isSubscriptionDialogOpen, setIsSubscriptionDialogOpen] = useState(false);
   const [currentStatus, setCurrentStatus] = useState(user.status);
   const [isImageModalOpen, setIsImageModalOpen] = useState(false);
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
   
   const router = useRouter();
   const { toast } = useToast();
@@ -193,6 +201,8 @@ export default function UserProfile({
     const file = e.target.files?.[0] || null;
     if (file) {
       try {
+        setIsUploadingImage(true);
+        
         // Create a preview URL
         const previewUrl = URL.createObjectURL(file);
         setImagePreview(previewUrl);
@@ -212,21 +222,18 @@ export default function UserProfile({
           
         if (uploadError) throw uploadError;
         
-        // Get the public URL with no expiry
+        // Get the public URL
         const { data: { publicUrl } } = supabase
           .storage
           .from('gym.members')
-          .getPublicUrl(filePath, {
-            download: false
-          });
-
-        
+          .getPublicUrl(filePath);
+      
         // Update the user with the new image URL
         const { error: imageUpdateError } = await supabase
           .from('users')
           .update({ image_url: publicUrl })
           .eq('id', user.id);
-          
+        
         if (imageUpdateError) throw imageUpdateError;
 
         // Cleanup preview URL
@@ -246,6 +253,8 @@ export default function UserProfile({
           description: "There was a problem uploading the profile picture.",
           variant: "destructive",
         });
+      } finally {
+        setIsUploadingImage(false);
       }
     }
   };
@@ -264,7 +273,6 @@ export default function UserProfile({
     try {
       setIsUpdating(true);
       
-      // Update user data
       const { error: updateError } = await supabase
         .from('users')
         .update({
@@ -273,44 +281,11 @@ export default function UserProfile({
           email: values.email || null,
           address: values.address || null,
           gender: values.gender || null,
+          status: values.status,
         })
         .eq('id', user.id);
         
       if (updateError) throw updateError;
-      
-      // If there's a new image, upload it
-      if (newImage) {
-        const fileExt = newImage.name.split('.').pop();
-        const fileName = `${user.id}.${fileExt}`;
-        const filePath = `profiles/${fileName}`;
-        
-        // Upload the new image
-        const { error: uploadError } = await supabase
-          .storage
-          .from('gym.members')
-          .upload(filePath, newImage, { 
-            upsert: true,
-            cacheControl: '31536000'
-          });
-          
-        if (uploadError) throw uploadError;
-        
-        // Get the public URL with no expiry
-        const { data: publicURLData } = supabase
-          .storage
-          .from('gym.members')
-          .getPublicUrl(filePath, {
-            download: false
-          });
-          
-        // Update the user with the new image URL
-        const { error: imageUpdateError } = await supabase
-          .from('users')
-          .update({ image_url: publicURLData.publicUrl })
-          .eq('id', user.id);
-          
-        if (imageUpdateError) throw imageUpdateError;
-      }
       
       toast({
         title: "Profile updated",
@@ -421,18 +396,49 @@ export default function UserProfile({
       <DialogContent className="max-w-2xl p-0">
         <div className="relative aspect-square">
           {user.image_url ? (
-            <img 
-              src={user.image_url} 
-              alt={user.name}
-              className="w-full h-full object-cover"
-              onError={(e) => {
-                const target = e.target as HTMLImageElement;
-                target.style.display = 'none';
-              }}
-            />
+            <>
+              <img 
+                src={imagePreview || user.image_url} 
+                alt={user.name}
+                className="w-full h-full object-cover"
+                onError={(e) => {
+                  const target = e.target as HTMLImageElement;
+                  target.style.display = 'none';
+                }}
+              />
+              <div className="absolute bottom-4 right-4 flex gap-2">
+                <label 
+                  htmlFor="modal-image-upload"
+                  className="bg-primary text-primary-foreground rounded-full p-2 cursor-pointer hover:bg-primary/90 transition-colors"
+                >
+                  <Upload className="h-4 w-4" />
+                  <input
+                    id="modal-image-upload"
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={handleImageChange}
+                  />
+                </label>
+              </div>
+            </>
           ) : (
-            <div className="w-full h-full flex items-center justify-center bg-muted">
+            <div className="w-full h-full flex flex-col items-center justify-center bg-muted gap-4">
               <User className="h-32 w-32 text-muted-foreground/50" />
+              <label 
+                htmlFor="modal-image-upload"
+                className="bg-primary text-primary-foreground px-4 py-2 rounded-md cursor-pointer hover:bg-primary/90 transition-colors flex items-center gap-2"
+              >
+                <Upload className="h-4 w-4" />
+                Upload Image
+                <input
+                  id="modal-image-upload"
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={handleImageChange}
+                />
+              </label>
             </div>
           )}
         </div>
@@ -457,29 +463,87 @@ export default function UserProfile({
       <Card>
         <CardHeader>
           <div className="flex items-start justify-between">
-            <div className="flex items-center gap-4">
-              <Avatar 
-                className="h-16 w-16 relative cursor-pointer transition-transform hover:scale-105"
-                onClick={() => setIsImageModalOpen(true)}
-              >
-                {user.image_url ? (
-                  <img 
-                    src={user.image_url} 
-                    alt={user.name}
-                    className="h-full w-full object-cover"
-                    onError={(e) => {
-                      const target = e.target as HTMLImageElement;
-                      target.style.display = 'none';
-                      const fallback = target.parentElement?.querySelector('.fallback') as HTMLDivElement;
-                      if (fallback) fallback.style.display = 'flex';
-                    }}
+            {/* <div className="flex items-center gap-4">
+              <div className="relative">
+                <Avatar 
+                  className="h-16 w-16 relative cursor-pointer transition-transform hover:scale-105"
+                  onClick={() => setIsImageModalOpen(true)}
+                >
+                  {user.image_url ? (
+                    <AvatarImage 
+                      src={user.image_url} 
+                      alt={user.name}
+                      className="h-full w-full object-cover"
+                      onError={(e) => {
+                        const target = e.target as HTMLImageElement;
+                        target.style.display = 'none';
+                        const fallback = target.parentElement?.querySelector('.fallback') as HTMLDivElement;
+                        if (fallback) fallback.style.display = 'flex';
+                      }}
+                    />
+                  ) : (
+                    <AvatarFallback className="text-lg">
+                      {getInitials(user.name)}
+                    </AvatarFallback>
+                  )}
+                </Avatar>
+                <label 
+                  htmlFor="profile-image" 
+                  className="absolute -bottom-2 -right-2 p-1 bg-primary rounded-full cursor-pointer hover:bg-primary/90 transition-colors"
+                >
+                  <Upload className="h-3 w-3 text-primary-foreground" />
+                  <input
+                    id="profile-image"
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={handleImageChange}
                   />
-                ) : (
-                  <AvatarFallback className="text-lg">
-                    {getInitials(user.name)}
-                  </AvatarFallback>
-                )}
-              </Avatar>
+                </label>
+              </div>
+              <div>
+                <CardTitle>{user.name}</CardTitle>
+                <CardDescription>Member since {format(new Date(user.created_at), 'MMMM d, yyyy')}</CardDescription>
+              </div>
+            </div> */}
+            <div className="flex items-center gap-4">
+              <div className="relative">
+                <Avatar 
+                  className="h-16 w-16 relative cursor-pointer transition-transform hover:scale-105"
+                  onClick={() => setIsImageModalOpen(true)}
+                >
+                  {user.image_url ? (
+                    <AvatarImage 
+                      src={user.image_url} 
+                      alt={user.name}
+                      className="h-full w-full object-cover"
+                      onError={(e) => {
+                        const target = e.target as HTMLImageElement;
+                        target.style.display = 'none';
+                        const fallback = target.parentElement?.querySelector('.fallback') as HTMLDivElement;
+                        if (fallback) fallback.style.display = 'flex';
+                      }}
+                    />
+                  ) : (
+                    <AvatarFallback className="text-lg">
+                      {getInitials(user.name)}
+                    </AvatarFallback>
+                  )}
+                </Avatar>
+                <label 
+                  htmlFor="profile-image" 
+                  className="absolute -bottom-2 -right-2 p-1 bg-primary rounded-full cursor-pointer hover:bg-primary/90 transition-colors"
+                >
+                  <Upload className="h-3 w-3 text-primary-foreground" />
+                  <input
+                    id="profile-image"
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={handleImageChange}
+                  />
+                </label>
+              </div>
               <div>
                 <CardTitle>{user.name}</CardTitle>
                 <CardDescription>Member since {format(new Date(user.created_at), 'MMMM d, yyyy')}</CardDescription>
@@ -505,7 +569,7 @@ export default function UserProfile({
             
             <TabsContent value="details" className="space-y-6 pt-4">
               <Form {...userForm}>
-                <form className="space-y-6">
+                <form onSubmit={userForm.handleSubmit(onUserSubmit)} className="space-y-6">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <FormField
                       control={userForm.control}
@@ -514,7 +578,7 @@ export default function UserProfile({
                         <FormItem>
                           <FormLabel>Full Name</FormLabel>
                           <FormControl>
-                            <Input {...field} disabled className="bg-muted/50" />
+                            <Input {...field} />
                           </FormControl>
                           <FormMessage />
                         </FormItem>
@@ -528,7 +592,7 @@ export default function UserProfile({
                         <FormItem>
                           <FormLabel>Phone Number</FormLabel>
                           <FormControl>
-                            <Input {...field} disabled className="bg-muted/50" />
+                            <Input {...field} />
                           </FormControl>
                           <FormMessage />
                         </FormItem>
@@ -540,9 +604,9 @@ export default function UserProfile({
                       name="email"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Email Address</FormLabel>
+                          <FormLabel>Email Address (Optional)</FormLabel>
                           <FormControl>
-                            <Input {...field} disabled className="bg-muted/50" />
+                            <Input {...field} type="email" />
                           </FormControl>
                           <FormMessage />
                         </FormItem>
@@ -554,9 +618,9 @@ export default function UserProfile({
                       name="address"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Address</FormLabel>
+                          <FormLabel>Address (Optional)</FormLabel>
                           <FormControl>
-                            <Input {...field} disabled className="bg-muted/50" />
+                            <Input {...field} />
                           </FormControl>
                           <FormMessage />
                         </FormItem>
@@ -568,10 +632,18 @@ export default function UserProfile({
                       name="gender"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Gender</FormLabel>
-                          <FormControl>
-                            <Input {...field} disabled className="bg-muted/50" />
-                          </FormControl>
+                          <FormLabel>Gender (Optional)</FormLabel>
+                          <Select onValueChange={field.onChange} defaultValue={field.value}>
+                            <FormControl>
+                              <SelectTrigger>
+                                <SelectValue placeholder="Select gender" />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              <SelectItem value="male">Male</SelectItem>
+                              <SelectItem value="female">Female</SelectItem>
+                            </SelectContent>
+                          </Select>
                           <FormMessage />
                         </FormItem>
                       )}
@@ -586,26 +658,38 @@ export default function UserProfile({
                       />
                     </div>
                   </div>
-                  
 
-                  <div className="flex items-center space-x-2">
-                    <FormField
-                      control={userForm.control}
-                      name="status"
-                      render={({ field }) => (
-                        <FormItem className="flex flex-row items-center space-x-2 space-y-0">
-                          <FormControl>
-                            <MemberStatusToggle
-                              userId={user.id}
-                              isActive={field.value}
-                              latestSubscription={subscriptions[0]}
-                              onStatusChange={handleStatusChange}
-                            />
-                          </FormControl>
-                          <FormLabel>Active Member</FormLabel>
-                        </FormItem>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-2">
+                      <FormField
+                        control={userForm.control}
+                        name="status"
+                        render={({ field }) => (
+                          <FormItem className="flex flex-row items-center space-x-2 space-y-0">
+                            <FormControl>
+                              <MemberStatusToggle
+                                userId={user.id}
+                                isActive={field.value}
+                                latestSubscription={subscriptions[0]}
+                                onStatusChange={handleStatusChange}
+                              />
+                            </FormControl>
+                            <FormLabel>Active Member</FormLabel>
+                          </FormItem>
+                        )}
+                      />
+                    </div>
+                    
+                    <Button type="submit" disabled={isUpdating}>
+                      {isUpdating ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          Saving...
+                        </>
+                      ) : (
+                        'Save Changes'
                       )}
-                    />
+                    </Button>
                   </div>
                 </form>
               </Form>
