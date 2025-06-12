@@ -4,9 +4,6 @@ type EmailParams = {
   userEmail?: string;
 };
 
-const BANNER_URL = `${process.env.NEXT_PUBLIC_BASE_URL}/assets/gym-banner.jpg`;
-const LOGO_URL = `${process.env.NEXT_PUBLIC_BASE_URL}/assets/email_avatar.png`;
-
 export async function sendNewUserEmail({ userName, userPhone, userEmail }: EmailParams) {
   // Verify API key is available
   const apiKey = process.env.NEXT_PUBLIC_BREVO_API_KEY;
@@ -16,30 +13,12 @@ export async function sendNewUserEmail({ userName, userPhone, userEmail }: Email
   }
 
   const emailContent = `
-    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 0; border: 1px solid #eee; border-radius: 5px;">
-      <!-- Banner Image -->
-      <div style="width: 100%; max-height: 200px; overflow: hidden;">
-        <img 
-          src="${BANNER_URL}" 
-          alt="Bodyshake Fitness Center" 
-          style="width: 100%; object-fit: cover;"
-        />
-      </div>
-
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #eee; border-radius: 5px;">
       <div style="text-align: center; padding: 20px 0; background-color: #f8f9fa; margin-bottom: 20px;">
-        <!-- Logo/Avatar -->
-        <div style="width: 80px; height: 80px; margin: -60px auto 15px; border-radius: 50%; overflow: hidden; border: 4px solid white; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
-          <img 
-            src="${LOGO_URL}" 
-            alt="Gym Logo" 
-            style="width: 100%; height: 100%; object-fit: cover;"
-          />
-        </div>
         <h1 style="color: #333; margin: 0;">New Member Registration</h1>
         <p style="color: #666; margin: 10px 0 0;">Bodyshake Fitness Center</p>
       </div>
 
-      <!-- Rest of the email content -->
       <div style="padding: 20px; background-color: #ffffff;">
         <p style="color: #444; font-size: 16px; line-height: 1.5;">
           A new member has registered at Bodyshake Fitness Center. Please find their details below:
@@ -87,18 +66,7 @@ export async function sendNewUserEmail({ userName, userPhone, userEmail }: Email
           name: 'Gym Admin'
         }],
         subject: 'New User Registration Alert',
-        htmlContent: emailContent,
-        // Add inline images for better email client compatibility
-        attachment: [
-          {
-            url: BANNER_URL,
-            name: "gym-banner.jpg"
-          },
-          {
-            url: LOGO_URL,
-            name: "email_avatar.png"
-          }
-        ]
+        htmlContent: emailContent
       })
     });
 
@@ -113,6 +81,6 @@ export async function sendNewUserEmail({ userName, userPhone, userEmail }: Email
     return response.json();
   } catch (error) {
     console.error('Email sending error:', error);
-    throw error; // Re-throw to handle in the component
+    throw error;
   }
 }
