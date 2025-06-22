@@ -70,6 +70,8 @@ export default function DashboardContent({
 }) {
   const [members, setMembers] = useState<Member[]>(initialMembers);
   const [filteredMembers, setFilteredMembers] = useState<Member[]>(initialMembers);
+  const [currentPage, setCurrentPage] = useState(1);
+  const membersPerPage = 10; // You can adjust this number as needed
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [subscriptionFilter, setSubscriptionFilter] = useState<string>('all');
@@ -82,6 +84,7 @@ export default function DashboardContent({
   // Apply filters and sort whenever search, filters or sort changes
   useEffect(() => {
     let result = [...members];
+    setCurrentPage(1); // Reset to first page on filter/sort/search change
     
     // Apply search
     if (searchQuery) {
@@ -372,7 +375,9 @@ export default function DashboardContent({
           </div>
         ) : (
           <div className="divide-y">
-            {filteredMembers.map((member) => {
+            {filteredMembers
+              .slice((currentPage - 1) * membersPerPage, currentPage * membersPerPage)
+              .map((member) => {
               const subscriptionStatus = getSubscriptionStatus(member);
               const daysLeft = getDaysLeftDisplay(member);
               
@@ -426,6 +431,30 @@ export default function DashboardContent({
           </div>
         )}
       </Card>
+      {/* Pagination Controls */}
+      {filteredMembers.length > membersPerPage && (
+        <div className="flex justify-center items-center gap-2 mt-4">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
+            disabled={currentPage === 1}
+          >
+            <ChevronLeft className="h-4 w-4" />
+          </Button>
+          <span className="text-sm">
+            Page {currentPage} of {Math.ceil(filteredMembers.length / membersPerPage)}
+          </span>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setCurrentPage((prev) => Math.min(Math.ceil(filteredMembers.length / membersPerPage), prev + 1))}
+            disabled={currentPage === Math.ceil(filteredMembers.length / membersPerPage)}
+          >
+            <ChevronRight className="h-4 w-4" />
+          </Button>
+        </div>
+      )}
     </div>
   );
 }
