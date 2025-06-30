@@ -48,6 +48,7 @@ import {
   Plus,
   Upload,
   User,
+  Trash2,
 } from 'lucide-react';
 import Link from 'next/link';
 import { MemberStatusToggle } from '@/components/member-status-toggle';
@@ -163,6 +164,8 @@ export default function UserProfile({
   const [currentStatus, setCurrentStatus] = useState(user.status);
   const [isImageModalOpen, setIsImageModalOpen] = useState(false);
   const [isUploadingImage, setIsUploadingImage] = useState(false);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
   
   const router = useRouter();
   const { toast } = useToast();
@@ -361,6 +364,38 @@ export default function UserProfile({
       });
     } finally {
       setIsAddingSubscription(false);
+    }
+  };
+
+  // Delete handler
+  const handleDeleteUser = async () => {
+    try {
+      setIsDeleting(true);
+      // Delete user from Supabase
+      const { error } = await supabase
+        .from('users')
+        .delete()
+        .eq('id', user.id);
+
+      if (error) throw error;
+
+      toast({
+        title: "Member deleted",
+        description: "The member has been deleted successfully.",
+      });
+
+      // Redirect to dashboard
+      router.push('/admin/dashboard');
+    } catch (error) {
+      console.error('Error deleting user:', error);
+      toast({
+        title: "Error deleting member",
+        description: "There was a problem deleting the member.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsDeleting(false);
+      setIsDeleteDialogOpen(false);
     }
   };
 
@@ -850,6 +885,51 @@ export default function UserProfile({
           </Tabs>
         </CardContent>
       </Card>
+
+      {/* Delete Member Button & Dialog */}
+      <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+        <DialogTrigger asChild>
+          <Button
+            variant="destructive"
+            className="w-full"
+            onClick={() => setIsDeleteDialogOpen(true)}
+          >
+            <Trash2 className="mr-2 h-4 w-4" />
+            Delete Member
+          </Button>
+        </DialogTrigger>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete Member</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete this member? This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setIsDeleteDialogOpen(false)}
+              disabled={isDeleting}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleDeleteUser}
+              disabled={isDeleting}
+            >
+              {isDeleting ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Deleting...
+                </>
+              ) : (
+                "Delete"
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <ImageModal />
     </div>
