@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+// import { ThemeButton } from '@/components/theme-toggle';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -21,7 +22,8 @@ import {
   Check,
   X,
   ArrowUpDown,
-  Eye
+  Eye,
+  LogOut
 } from 'lucide-react';
 import { 
   Select, 
@@ -36,6 +38,7 @@ import {
   PopoverTrigger,
 } from '@/components/ui/popover';
 import { format, isAfter, isBefore, parseISO, addDays, differenceInDays } from 'date-fns';
+import { useRouter } from 'next/navigation';
 
 type Member = {
   id: string;
@@ -77,9 +80,28 @@ export default function DashboardContent({
   const [subscriptionFilter, setSubscriptionFilter] = useState<string>('all');
   const [sortOption, setSortOption] = useState<SortOption>({ field: 'name', direction: 'asc' });
   const [isFilterOpen, setIsFilterOpen] = useState(false);
+  const [role, setRole] = useState<string | null>(null); // Add role state
+  const router = useRouter();
   
   const { toast } = useToast();
   const supabase = createClient();
+
+  // Fetch user role on mount
+  useEffect(() => {
+    const fetchRole = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user?.id) {
+        const { data, error } = await supabase
+          .from('user_roles')
+          .select('role')
+          .eq('id', user.id)
+          .single();
+        if (data?.role) setRole(data.role);
+        else setRole(null);
+      }
+    };
+    fetchRole();
+  }, [supabase]);
 
   // Apply filters and sort whenever search, filters or sort changes
   useEffect(() => {
@@ -243,8 +265,27 @@ export default function DashboardContent({
     };
   };
 
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    router.push('/admin/login');
+  };
+
   return (
     <div className="space-y-6">
+      {/* Top bar with theme and logout buttons */}
+      <div className="flex justify-end items-center gap-2 mb-4">
+        {/* Theme button here */}
+        {/* Example: <ThemeButton /> */}
+        <Button 
+          variant="destructive" 
+          size="icon" 
+          onClick={handleLogout}
+          aria-label="Log Out"
+        >
+          <LogOut className="h-4 w-4" />
+        </Button>
+      </div>
+      
       <div className="flex flex-col md:flex-row gap-4">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -417,12 +458,15 @@ export default function DashboardContent({
                     </div>
                     
                     <div className="flex items-center justify-end">
-                      <Link href={`/admin/user/${member.id}`}>
-                        <Button variant="ghost" size="sm">
-                          <Eye className="h-4 w-4 mr-1" />
-                          View
-                        </Button>
-                      </Link>
+                      {role === 'admin' && (
+                        <Link href={`/admin/user/${member.id}`}>
+                          <Button variant="ghost" size="sm">
+                            <Eye className="h-4 w-4 mr-1" />
+                            View
+                          </Button>
+                        </Link>
+                      )}
+                      {/* If role is 'user', nothing is rendered here */}
                     </div>
                   </div>
                 </div>
