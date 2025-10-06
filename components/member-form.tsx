@@ -59,8 +59,11 @@ export function MemberForm() {
     try {
       setIsLoading(true);
 
-      // Normalize email for consistent lookups
+      // Normalize fields for consistent lookups and storage
       const normalizedEmail = values.email.trim().toLowerCase();
+      const normalizedName = values.name.trim();
+      const normalizedPhone = values.phone.trim();
+      const normalizedAddress = values.address.trim();
 
       // Check if a user with this email already exists before any uploads
       const { data: existingUser, error: existingUserError } = await supabase
@@ -77,6 +80,48 @@ export function MemberForm() {
         toast({
           title: "Email already registered",
           description: "An account with this email already exists.",
+          variant: "destructive",
+        });
+        setIsLoading(false);
+        return;
+      }
+
+      // Check if a user with this phone already exists
+      const { data: phoneUsers, error: existingPhoneError } = await supabase
+        .from('users')
+        .select('id')
+        .eq('phone', normalizedPhone)
+        .limit(1);
+
+      if (existingPhoneError) {
+        throw existingPhoneError;
+      }
+
+      if (phoneUsers && phoneUsers.length > 0) {
+        toast({
+          title: "Phone already registered",
+          description: "An account with this phone number already exists.",
+          variant: "destructive",
+        });
+        setIsLoading(false);
+        return;
+      }
+
+      // Check for exact match on other identifying fields (name + address + gender)
+      const { data: profileDupUsers, error: profileDupError } = await supabase
+        .from('users')
+        .select('id')
+        .match({ name: normalizedName, address: normalizedAddress, gender: values.gender })
+        .limit(1);
+
+      if (profileDupError) {
+        throw profileDupError;
+      }
+
+      if (profileDupUsers && profileDupUsers.length > 0) {
+        toast({
+          title: "Duplicate profile detected",
+          description: "A member with the same name, address and gender already exists.",
           variant: "destructive",
         });
         setIsLoading(false);
@@ -125,10 +170,10 @@ export function MemberForm() {
       const { error: userError, data: newUser } = await supabase
         .from('users')
         .insert({
-          name: values.name,
-          phone: values.phone,
+          name: normalizedName,
+          phone: normalizedPhone,
           email: normalizedEmail,
-          address: values.address,
+          address: normalizedAddress,
           gender: values.gender,
           image_url: imageUrl,
           status: false,
