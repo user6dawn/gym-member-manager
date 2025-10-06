@@ -59,6 +59,30 @@ export function MemberForm() {
     try {
       setIsLoading(true);
 
+      // Normalize email for consistent lookups
+      const normalizedEmail = values.email.trim().toLowerCase();
+
+      // Check if a user with this email already exists before any uploads
+      const { data: existingUser, error: existingUserError } = await supabase
+        .from('users')
+        .select('id')
+        .eq('email', normalizedEmail)
+        .maybeSingle();
+
+      if (existingUserError) {
+        throw existingUserError;
+      }
+
+      if (existingUser) {
+        toast({
+          title: "Email already registered",
+          description: "An account with this email already exists.",
+          variant: "destructive",
+        });
+        setIsLoading(false);
+        return;
+      }
+
       if (!image) {
         toast({
           title: "Error",
@@ -103,7 +127,7 @@ export function MemberForm() {
         .insert({
           name: values.name,
           phone: values.phone,
-          email: values.email || null,
+          email: normalizedEmail,
           address: values.address,
           gender: values.gender,
           image_url: imageUrl,
@@ -119,7 +143,7 @@ export function MemberForm() {
         await sendNewUserEmail({
           userName: values.name,
           userPhone: values.phone,
-          userEmail: values.email || undefined
+          userEmail: normalizedEmail
         });
       } catch (emailError) {
         console.error('Failed to send email notification:', emailError);
