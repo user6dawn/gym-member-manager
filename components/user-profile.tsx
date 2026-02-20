@@ -846,6 +846,9 @@ export default function UserProfile({
                                 <span className="text-sm text-muted-foreground">
                                   {statusState.daysText}
                                 </span>
+                                {/* <span className="text-sm text-muted-foreground ml-2">
+                                  {`ID: ${subscription.id}`}
+                                </span> */}
                               </div>
                               <div className="flex gap-6 mt-2">
                                 <div>
