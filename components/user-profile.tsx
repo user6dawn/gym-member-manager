@@ -19,6 +19,7 @@ import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Separator } from '@/components/ui/separator';
+import { Textarea } from '@/components/ui/textarea';
 import {
   Dialog,
   DialogContent,
@@ -65,6 +66,7 @@ type UserType = {
   created_at: string;
   address: string | null;
   gender: string | null;
+  remarks: string | null;
 };
 
 type SubscriptionType = {
@@ -86,6 +88,7 @@ const userSchema = z.object({
   status: z.boolean(),
   address: z.string().optional().or(z.literal('')),
   gender: z.string().optional().or(z.literal('')),
+   remarks: z.string().optional().or(z.literal('')),
 });
 
 const subscriptionSchema = z.object({
@@ -180,6 +183,7 @@ export default function UserProfile({
       status: currentStatus,
       address: user.address || '',
       gender: user.gender || '',
+      remarks: user.remarks || '',
     },
   });
   
@@ -285,6 +289,7 @@ export default function UserProfile({
           address: values.address || null,
           gender: values.gender || null,
           status: values.status,
+          remarks: values.remarks || null,
         })
         .eq('id', user.id);
         
@@ -692,6 +697,20 @@ export default function UserProfile({
                         className="bg-muted/50"
                       />
                     </div>
+                    
+                    <FormField
+                      control={userForm.control}
+                      name="remarks"
+                      render={({ field }) => (
+                        <FormItem className="md:col-span-2">
+                          <FormLabel>Remarks (Optional)</FormLabel>
+                          <FormControl>
+                            <Textarea {...field} rows={3} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
                   </div>
 
                   <div className="flex items-center justify-between">
