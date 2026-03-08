@@ -10,14 +10,15 @@ export const revalidate = 0;
 export default async function DashboardPage() {
   const supabase = createServerClient();
   
-  // Fetch initial members data with their latest subscription
+  // Fetch initial members data with their latest subscription (including session)
   const { data: members, error } = await supabase
     .from('users')
     .select(`
       *,
       subscriptions:subscriptions(
         payment_date,
-        expiration_date
+        expiration_date,
+        session
       )
     `)
     .order('created_at', { ascending: false });

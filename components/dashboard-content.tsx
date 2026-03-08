@@ -58,6 +58,7 @@ type Member = {
     inactive_start_date: string | null;
     days_remaining: number | null;
     last_active_date: string | null;
+    session?: string | null; // added session field
   }>;
 };
 
@@ -396,10 +397,11 @@ export default function DashboardContent({
       
       <Card className="overflow-hidden">
         <div className="bg-muted/50 p-4">
-          <div className="grid grid-cols-6 gap-4 text-sm font-medium text-muted-foreground">
+          <div className="grid grid-cols-7 gap-4 text-sm font-medium text-muted-foreground">
             <div className="flex items-center">Profile</div>
             <div className="flex items-center">Name</div>
             <div className="flex items-center">Phone</div>
+            <div className="flex items-center">Session</div>
             <div className="flex items-center">Expiration</div>
             <div className="flex items-center">Days Left</div>
             <div className="flex items-center justify-end">Actions</div>
@@ -421,10 +423,11 @@ export default function DashboardContent({
               .map((member) => {
               const subscriptionStatus = getSubscriptionStatus(member);
               const daysLeft = getDaysLeftDisplay(member);
+              const sessionValue = member.subscriptions[0]?.session ?? 'Not set';
               
               return (
                 <div key={member.id} className="p-4">
-                  <div className="grid grid-cols-6 gap-4 items-center">
+                  <div className="grid grid-cols-7 gap-4 items-center">
                     <div className="flex items-center">
                       <Avatar className="h-16 w-16">
                         {member.image_url ? (
@@ -443,6 +446,10 @@ export default function DashboardContent({
                     
                     <div className="flex items-center">
                       <span className="text-sm">{member.phone}</span>
+                    </div>
+                    
+                    <div className="flex items-center">
+                      <span className="text-sm capitalize">{sessionValue}</span>
                     </div>
                     
                     <div className="flex items-center">

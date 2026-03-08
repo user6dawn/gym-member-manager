@@ -79,6 +79,7 @@ type SubscriptionType = {
   days_remaining: number | null;
   last_active_date: string | null;
   expiration_date: string; // Added property
+  session?: 'morning' | 'afternoon' | 'night' | null;
 };
 
 const userSchema = z.object({
@@ -94,6 +95,9 @@ const userSchema = z.object({
 const subscriptionSchema = z.object({
   start_date: z.date({ required_error: 'Start date is required' }),
   total_days: z.number().min(1, { message: 'Total days must be at least 1' }),
+  session: z.enum(['morning', 'afternoon', 'night'], {
+    required_error: 'Please select a session time',
+  }),
 });
 
 // Add function to calculate subscription status
@@ -192,6 +196,7 @@ export default function UserProfile({
     defaultValues: {
       start_date: new Date(),
       total_days: 30,
+      session: 'morning',
     },
   });
 
@@ -329,7 +334,8 @@ export default function UserProfile({
           total_days: values.total_days,
           active_days: 0,
           inactive_days: 0,
-          last_active_date: user.status ? formattedDate : null
+          last_active_date: user.status ? formattedDate : null,
+          session: values.session,
         })
         .select()
         .single();
@@ -354,6 +360,7 @@ export default function UserProfile({
       subscriptionForm.reset({
         start_date: new Date(),
         total_days: 30,
+        session: 'morning',
       });
       
       setIsSubscriptionDialogOpen(false);
@@ -803,6 +810,29 @@ export default function UserProfile({
                         
                         <FormField
                           control={subscriptionForm.control}
+                          name="session"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Session Time</FormLabel>
+                              <Select onValueChange={field.onChange} defaultValue={field.value}>
+                                <FormControl>
+                                  <SelectTrigger>
+                                    <SelectValue placeholder="Select session time" />
+                                  </SelectTrigger>
+                                </FormControl>
+                                <SelectContent>
+                                  <SelectItem value="morning">Morning</SelectItem>
+                                  <SelectItem value="afternoon">Afternoon</SelectItem>
+                                  <SelectItem value="night">Night</SelectItem>
+                                </SelectContent>
+                              </Select>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                        
+                        <FormField
+                          control={subscriptionForm.control}
                           name="total_days"
                           render={({ field }) => (
                             <FormItem>
@@ -892,6 +922,12 @@ export default function UserProfile({
                                       : remainingDays <= 0 
                                         ? '0 days'
                                         : `${remainingDays} days`}
+                                  </p>
+                                </div>
+                                <div>
+                                  <Label className="text-xs text-muted-foreground">Session</Label>
+                                  <p className="font-medium capitalize">
+                                    {subscription.session ?? 'Not set'}
                                   </p>
                                 </div>
                               </div>
