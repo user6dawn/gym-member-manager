@@ -930,6 +930,12 @@ export default function UserProfile({
                                     {subscription.session ?? 'Not set'}
                                   </p>
                                 </div>
+                                <div>
+                                  <Label className="text-xs text-muted-foreground">Expires</Label>
+                                  <p className="font-medium">
+                                    {format(new Date(subscription.expiration_date), 'MMM d, yyyy')}
+                                  </p>
+                                </div>
                               </div>
                             </div>
                           </div>
