@@ -14,7 +14,7 @@ export default async function UserDetailPage({
 }) {
   const { id } = params;
   const supabase = createServerClient();
-  
+
   // Fetch user data
   const { data: user, error } = await supabase
     .from('users')

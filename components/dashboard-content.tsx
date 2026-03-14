@@ -62,16 +62,22 @@ type Member = {
   }>;
 };
 
+type DashboardContentProps = {
+  initialMembers: Member[];
+  newUsersCount: number;
+  newSubscriptionsCount: number;
+};
+
 type SortOption = {
   field: string;
   direction: 'asc' | 'desc';
 };
 
-export default function DashboardContent({ 
-  initialMembers 
-}: { 
-  initialMembers: Member[] 
-}) {
+export default function DashboardContent({
+  initialMembers,
+  newUsersCount,
+  newSubscriptionsCount,
+}: DashboardContentProps) {
   const [members, setMembers] = useState<Member[]>(initialMembers);
   const [filteredMembers, setFilteredMembers] = useState<Member[]>(initialMembers);
   const [currentPage, setCurrentPage] = useState(1);
@@ -273,18 +279,26 @@ export default function DashboardContent({
 
   return (
     <div className="space-y-6">
+      {/* Summary cards */}
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        <Card className="col-span-2">
+          <div className="p-4 space-y-1">
+            <p className="text-sm text-muted-foreground">New users (today)</p>
+            <p className="text-2xl font-bold">{newUsersCount}</p>
+          </div>
+        </Card>
+        <Card className="col-span-2">
+          <div className="p-4 space-y-1">
+            <p className="text-sm text-muted-foreground">New subscriptions (today)</p>
+            <p className="text-2xl font-bold">{newSubscriptionsCount}</p>
+          </div>
+        </Card>
+      </div>
       {/* Top bar with theme and logout buttons */}
       <div className="flex justify-end items-center gap-2 mb-4">
         {/* Theme button here */}
         {/* Example: <ThemeButton /> */}
-        <Button 
-          variant="destructive" 
-          size="icon" 
-          onClick={handleLogout}
-          aria-label="Log Out"
-        >
-          <LogOut className="h-4 w-4" />
-        </Button>
+
       </div>
       
       <div className="flex flex-col md:flex-row gap-4">

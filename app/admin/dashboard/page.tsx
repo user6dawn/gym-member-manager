@@ -9,7 +9,7 @@ export const revalidate = 0;
 
 export default async function DashboardPage() {
   const supabase = createServerClient();
-  
+
   // Fetch initial members data with their latest subscription (including session)
   const { data: members, error } = await supabase
     .from('users')
@@ -22,12 +22,12 @@ export default async function DashboardPage() {
       )
     `)
     .order('created_at', { ascending: false });
-  
+
   if (error) {
     console.error('Error fetching members:', error);
   }
 
-  const processedMembers = members?.map(member => {
+  const processedMembers = members?.map((member) => {
     // Find the latest subscription by expiration date
     const subscriptions = member.subscriptions as any[] || [];
     const latestSubscription = subscriptions.length > 0
@@ -42,20 +42,31 @@ export default async function DashboardPage() {
     };
   }) || [];
 
+  // Calculate summary metrics for the dashboard (today's numbers)
+  const now = new Date();
+  const todayDateOnly = now.toISOString().slice(0, 10);
+
+  const { count: newUsersToday } = await supabase
+    .from('users')
+    .select('*', { count: 'exact', head: true })
+    .gte('created_at', todayDateOnly)
+    .lt('created_at', new Date(now.getTime() + 24 * 60 * 60 * 1000).toISOString());
+
+  const { count: newSubscriptionsToday } = await supabase
+    .from('subscriptions')
+    .select('*', { count: 'exact', head: true })
+    .eq('payment_date', todayDateOnly);
+
   return (
     <div className="container mx-auto p-6">
-      <div className="mb-6 flex justify-between items-center">
-        <div>
-        <h1 className="text-3xl font-bold">Member Dashboard</h1>
-        <p className="text-muted-foreground">
-          Manage gym members and their subscriptions
-        </p>
-      </div>
-        <ThemeToggle />
-      </div>
-      
+
+
       <Suspense fallback={<DashboardSkeleton />}>
-        <DashboardContent initialMembers={processedMembers} />
+        <DashboardContent
+          initialMembers={processedMembers}
+          newUsersCount={newUsersToday ?? 0}
+          newSubscriptionsCount={newSubscriptionsToday ?? 0}
+        />
       </Suspense>
     </div>
   );
