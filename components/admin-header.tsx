@@ -25,6 +25,11 @@ export default function AdminHeader({ isAdmin }: AdminHeaderProps) {
     return pathname === path;
   };
 
+  // Hide header for unauthenticated routes to prevent it showing during login flow
+  if (pathname === '/admin/login' || pathname === '/admin') {
+    return null;
+  }
+
   const handleSignOut = async () => {
     try {
       await supabase.auth.signOut();
