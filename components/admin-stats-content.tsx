@@ -151,12 +151,12 @@ export default function AdminStatsContent({
           <p className="text-2xl font-bold">{activeSubscriptions}</p>
         </Card>
         <Card className="p-4 space-y-1">
-          <p className="text-sm text-muted-foreground">New users (last 30 days)</p>
+          <p className="text-sm text-muted-foreground">Sign-up (last 30 days)</p>
           <p className="text-2xl font-bold">{newUsers}</p>
         </Card>
         <Card className="p-4 space-y-1">
           <p className="text-sm text-muted-foreground">
-            New subscriptions (last 30 days)
+            Renewal (last 30 days)
           </p>
           <p className="text-2xl font-bold">{newSubscriptions}</p>
         </Card>

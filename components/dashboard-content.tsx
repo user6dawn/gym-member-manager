@@ -283,13 +283,13 @@ export default function DashboardContent({
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <Card className="col-span-2">
           <div className="p-4 space-y-1">
-            <p className="text-sm text-muted-foreground">New users (today)</p>
+            <p className="text-sm text-muted-foreground">sign-up (today)</p>
             <p className="text-2xl font-bold">{newUsersCount}</p>
           </div>
         </Card>
         <Card className="col-span-2">
           <div className="p-4 space-y-1">
-            <p className="text-sm text-muted-foreground">New subscriptions (today)</p>
+            <p className="text-sm text-muted-foreground">Renewals (today)</p>
             <p className="text-2xl font-bold">{newSubscriptionsCount}</p>
           </div>
         </Card>
