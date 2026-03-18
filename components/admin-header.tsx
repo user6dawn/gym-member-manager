@@ -10,12 +10,9 @@ import Image from 'next/image';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { createClient } from '@/lib/supabase/client';
 
-type AdminHeaderProps = {
-  isAdmin: boolean;
-};
-
-export default function AdminHeader({ isAdmin }: AdminHeaderProps) {
+export default function AdminHeader() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
   const pathname = usePathname();
   const router = useRouter();
   const { toast } = useToast();
@@ -24,6 +21,29 @@ export default function AdminHeader({ isAdmin }: AdminHeaderProps) {
   const isActive = (path: string) => {
     return pathname === path;
   };
+
+  useEffect(() => {
+    const fetchRole = async () => {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (!user?.id) {
+        setIsAdmin(false);
+        return;
+      }
+
+      const { data } = await supabase
+        .from('user_roles')
+        .select('role')
+        .eq('id', user.id)
+        .single();
+
+      setIsAdmin(data?.role === 'admin');
+    };
+
+    fetchRole();
+  }, [supabase]);
 
   // Hide header for unauthenticated routes to prevent it showing during login flow
   if (pathname === '/admin/login' || pathname === '/admin') {
@@ -57,7 +77,7 @@ export default function AdminHeader({ isAdmin }: AdminHeaderProps) {
                 alt="BodyShake Fitness"
                 width={24}
                 height={24}
-                className="text-primary"
+                className="h-6 w-auto text-primary"
               />
               <span className="font-bold text-lg hidden sm:inline-block">
                 BodyShake Fitness Center
@@ -184,4 +204,3 @@ export default function AdminHeader({ isAdmin }: AdminHeaderProps) {
     </header>
   );
 }
-

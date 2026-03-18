@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useEffect } from 'react';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { useState, useEffect, useMemo } from 'react';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 // import { ThemeButton } from '@/components/theme-toggle';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -12,6 +12,7 @@ import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import { createClient } from '@/lib/supabase/client';
 import Link from 'next/link';
+import Image from 'next/image';
 import { 
   ChevronLeft, 
   ChevronRight, 
@@ -272,6 +273,15 @@ export default function DashboardContent({
     };
   };
 
+  const paginatedMembers = useMemo(
+    () =>
+      filteredMembers.slice(
+        (currentPage - 1) * membersPerPage,
+        currentPage * membersPerPage,
+      ),
+    [filteredMembers, currentPage]
+  );
+
   const handleLogout = async () => {
     await supabase.auth.signOut();
     router.push('/admin/login');
@@ -432,20 +442,28 @@ export default function DashboardContent({
           </div>
         ) : (
           <div className="divide-y">
-            {filteredMembers
-              .slice((currentPage - 1) * membersPerPage, currentPage * membersPerPage)
-              .map((member) => {
+            {paginatedMembers.map((member, index) => {
               const subscriptionStatus = getSubscriptionStatus(member);
               const daysLeft = getDaysLeftDisplay(member);
               const sessionValue = member.subscriptions[0]?.session ?? 'Not set';
+              const imageUrl = getImageUrl(member.image_url);
               
               return (
                 <div key={member.id} className="p-4">
                   <div className="grid grid-cols-7 gap-4 items-center">
                     <div className="flex items-center">
-                      <Avatar className="h-16 w-16">
-                        {member.image_url ? (
-                          <AvatarImage src={member.image_url} alt={member.name} className="object-cover" />
+                      <Avatar className="h-16 w-16 overflow-hidden">
+                        {imageUrl ? (
+                          <Image
+                            src={imageUrl}
+                            alt={member.name}
+                            width={64}
+                            height={64}
+                            sizes="64px"
+                            quality={70}
+                            priority={currentPage === 1 && index < 4}
+                            className="h-full w-full object-cover"
+                          />
                         ) : (
                           <AvatarFallback className="text-lg">
                             {getInitials(member.name)}

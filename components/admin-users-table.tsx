@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -22,12 +23,16 @@ import {
 import { ArrowUpDown } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
+type SubscriptionStatus = 'active' | 'inactive' | 'expired';
+
 type UserRow = {
   id: string;
   name: string;
   email: string | null;
   status: boolean;
   created_at: string;
+  lastSubscriptionDate: string | null;
+  subscriptionStatus: SubscriptionStatus;
 };
 
 type SortField = 'name' | 'created_at';
@@ -37,8 +42,9 @@ type AdminUsersTableProps = {
 };
 
 export default function AdminUsersTable({ users }: AdminUsersTableProps) {
+  const router = useRouter();
   const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>(
+  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive' | 'expired'>(
     'all',
   );
   const [sortField, setSortField] = useState<SortField>('name');
@@ -59,8 +65,7 @@ export default function AdminUsersTable({ users }: AdminUsersTableProps) {
     }
 
     if (statusFilter !== 'all') {
-      const isActive = statusFilter === 'active';
-      result = result.filter((u) => u.status === isActive);
+      result = result.filter((u) => u.subscriptionStatus === statusFilter);
     }
 
     result.sort((a, b) => {
@@ -110,8 +115,27 @@ export default function AdminUsersTable({ users }: AdminUsersTableProps) {
         />
         <div className="flex gap-3 items-center">
           <Select
+            value={`${sortField}-${sortDirection}`}
+            onValueChange={(value: `${SortField}-${'asc' | 'desc'}`) => {
+              const [field, direction] = value.split('-') as [SortField, 'asc' | 'desc'];
+              setSortField(field);
+              setSortDirection(direction);
+              setPage(1);
+            }}
+          >
+            <SelectTrigger className="w-[170px]">
+              <SelectValue placeholder="Sort users" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="name-asc">Name (A-Z)</SelectItem>
+              <SelectItem value="name-desc">Name (Z-A)</SelectItem>
+              <SelectItem value="created_at-desc">Newest first</SelectItem>
+              <SelectItem value="created_at-asc">Oldest first</SelectItem>
+            </SelectContent>
+          </Select>
+          <Select
             value={statusFilter}
-            onValueChange={(value: 'all' | 'active' | 'inactive') => {
+            onValueChange={(value: 'all' | 'active' | 'inactive' | 'expired') => {
               setStatusFilter(value);
               setPage(1);
             }}
@@ -123,6 +147,7 @@ export default function AdminUsersTable({ users }: AdminUsersTableProps) {
               <SelectItem value="all">All</SelectItem>
               <SelectItem value="active">Active</SelectItem>
               <SelectItem value="inactive">Inactive</SelectItem>
+              <SelectItem value="expired">Expired</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -144,6 +169,7 @@ export default function AdminUsersTable({ users }: AdminUsersTableProps) {
               </TableHead>
               <TableHead>Email</TableHead>
               <TableHead>Status</TableHead>
+              <TableHead>Last Subscription</TableHead>
               <TableHead>
                 <Button
                   variant="ghost"
@@ -159,19 +185,40 @@ export default function AdminUsersTable({ users }: AdminUsersTableProps) {
           <TableBody>
             {pageItems.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={4} className="text-center text-muted-foreground">
+                <TableCell colSpan={5} className="text-center text-muted-foreground">
                   No users found
                 </TableCell>
               </TableRow>
             ) : (
               pageItems.map((user) => (
-                <TableRow key={user.id}>
+                <TableRow
+                  key={user.id}
+                  className="hover:bg-accent/60 transition cursor-pointer"
+                  onClick={() => router.push(`/admin/user/${user.id}`)}
+                >
                   <TableCell className="font-medium">{user.name}</TableCell>
                   <TableCell>{user.email ?? '-'}</TableCell>
                   <TableCell>
-                    <Badge variant={user.status ? 'outline' : 'destructive'}>
-                      {user.status ? 'Active' : 'Inactive'}
+                    <Badge
+                      variant={
+                        user.subscriptionStatus === 'active'
+                          ? 'outline'
+                          : user.subscriptionStatus === 'expired'
+                          ? 'destructive'
+                          : 'secondary'
+                      }
+                    >
+                      {user.subscriptionStatus.charAt(0).toUpperCase() + user.subscriptionStatus.slice(1)}
                     </Badge>
+                  </TableCell>
+                  <TableCell>
+                    {user.lastSubscriptionDate
+                      ? new Date(user.lastSubscriptionDate).toLocaleDateString(undefined, {
+                          year: 'numeric',
+                          month: 'short',
+                          day: 'numeric',
+                        })
+                      : '-'}
                   </TableCell>
                   <TableCell>
                     {new Date(user.created_at).toLocaleDateString(undefined, {
@@ -219,4 +266,3 @@ export default function AdminUsersTable({ users }: AdminUsersTableProps) {
     </div>
   );
 }
-

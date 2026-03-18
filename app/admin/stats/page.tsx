@@ -1,9 +1,6 @@
 import { createServerClient } from '@/lib/supabase/server';
 import AdminStatsContent from '@/components/admin-stats-content';
 
-export const dynamic = 'force-static';
-export const revalidate = 0;
-
 export default async function AdminStatsPage() {
   const supabase = createServerClient();
 
@@ -105,4 +102,3 @@ export default async function AdminStatsPage() {
     </div>
   );
 }
-

@@ -4,7 +4,16 @@ const nextConfig = {
     ignoreDuringBuilds: true,
   },
   images: {
-    domains: ['rnfvzaejxwqbwmryxnqp.supabase.co'],
+    domains: [
+      'rnfvzaejxwqbwmryxnqp.supabase.co',
+      'olzdazhydshpykwxuklc.supabase.co',
+    ],
+    remotePatterns: [
+      {
+        protocol: 'https',
+        hostname: '**.supabase.co',
+      },
+    ],
     unoptimized: false,
   },
   env: {

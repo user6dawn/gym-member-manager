@@ -2,10 +2,6 @@ import { createServerClient } from '@/lib/supabase/server';
 import DashboardContent from '@/components/dashboard-content';
 import { Suspense } from 'react';
 import { DashboardSkeleton } from '@/components/skeletons';
-import { ThemeToggle } from '@/components/theme-toggle';
-
-export const dynamic = 'force-static';
-export const revalidate = 0;
 
 export default async function DashboardPage() {
   const supabase = createServerClient();
@@ -14,10 +10,23 @@ export default async function DashboardPage() {
   const { data: members, error } = await supabase
     .from('users')
     .select(`
-      *,
+      id,
+      name,
+      phone,
+      email,
+      image_url,
+      status,
       subscriptions:subscriptions(
+        id,
+        created_at,
         payment_date,
         expiration_date,
+        total_days,
+        active_days,
+        inactive_days,
+        inactive_start_date,
+        days_remaining,
+        last_active_date,
         session
       )
     `)

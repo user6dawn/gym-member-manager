@@ -4,9 +4,6 @@ import UserProfile from '@/components/user-profile';
 import { Suspense } from 'react';
 import { UserDetailSkeleton } from '@/components/skeletons';
 
-export const dynamic = 'force-static';
-export const revalidate = 0;
-
 export default async function UserDetailPage({
   params,
 }: {
