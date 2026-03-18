@@ -12,13 +12,11 @@ import { useToast } from '@/hooks/use-toast';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Separator } from '@/components/ui/separator';
 import { Textarea } from '@/components/ui/textarea';
 import {
   Dialog,
@@ -52,6 +50,7 @@ import {
   Trash2,
 } from 'lucide-react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { MemberStatusToggle } from '@/components/member-status-toggle';
 import { ThemeToggle } from '@/components/theme-toggle';
 
@@ -73,11 +72,6 @@ type SubscriptionType = {
   id: string;
   created_at: string;
   total_days: number;
-  active_days: number;
-  inactive_days: number;
-  inactive_start_date: string | null;
-  days_remaining: number | null;
-  last_active_date: string | null;
   expiration_date: string; // Added property
   session?: 'morning' | 'afternoon' | 'night' | null;
 };
@@ -113,15 +107,6 @@ const getSubscriptionStatus = (subscription: SubscriptionType) => {
   const today = new Date();
   const expirationDate = new Date(subscription.expiration_date);
   const remainingDays = Math.ceil((expirationDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
-
-  // If member has inactive days and remaining days
-  if (subscription.days_remaining !== null) {
-    return { 
-      status: 'Paused',
-      variant: 'default' as const,
-      daysText: `${subscription.days_remaining} days on hold`
-    };
-  }
 
   // If subscription has expired
   if (remainingDays <= 0) {
@@ -165,7 +150,6 @@ export default function UserProfile({
 }) {
   const [isUpdating, setIsUpdating] = useState(false);
   const [isAddingSubscription, setIsAddingSubscription] = useState(false);
-  const [newImage, setNewImage] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(user.image_url);
   const [isSubscriptionDialogOpen, setIsSubscriptionDialogOpen] = useState(false);
   const [currentStatus, setCurrentStatus] = useState(user.status);
@@ -224,11 +208,11 @@ export default function UserProfile({
         const fileName = `${user.id}-${Date.now()}.${fileExt}`;
         const filePath = `profiles/${fileName}`;
         
-        const { error: uploadError, data } = await supabase
+        const { error: uploadError } = await supabase
           .storage
           .from('gym.members')
           .upload(filePath, file, { 
-            upsert: true,
+            upsert: false,
             cacheControl: '31536000'
           });
           
@@ -324,17 +308,14 @@ export default function UserProfile({
       
       const formattedDate = format(values.start_date, 'yyyy-MM-dd');
       
-      const { data, error } = await supabase
+      const { error } = await supabase
         .from('subscriptions')
         .insert({
           user_id: user.id,
           created_at: formattedDate,
-          payment_date: formattedDate, // Add this line to set payment_date
+          payment_date: formattedDate,
           expiration_date: format(addDays(values.start_date, values.total_days), 'yyyy-MM-dd'),
           total_days: values.total_days,
-          active_days: 0,
-          inactive_days: 0,
-          last_active_date: user.status ? formattedDate : null,
           session: values.session,
         })
         .select()
@@ -365,8 +346,7 @@ export default function UserProfile({
       
       setIsSubscriptionDialogOpen(false);
       
-      // Force a hard refresh to update the UI
-      window.location.reload();
+      router.refresh();
     } catch (error) {
       console.error('Error adding subscription:', error);
       toast({
@@ -417,8 +397,7 @@ export default function UserProfile({
       .channel('status_changes')
       .on('postgres_changes', 
         { event: 'UPDATE', schema: 'public', table: 'users', filter: `id=eq.${user.id}` },
-        (payload) => {
-          // Refresh data when status changes
+        () => {
           router.refresh();
         }
       )
@@ -432,7 +411,7 @@ export default function UserProfile({
   const getMemberStatus = () => {
     if (!currentStatus) {
       return subscriptions.length > 0 ? 
-        { text: 'Paused', variant: 'default' as const } : 
+        { text: 'Inactive', variant: 'default' as const } : 
         { text: 'Inactive', variant: 'destructive' as const };
     }
     return { text: 'Active', variant: 'outline' as const };
@@ -444,14 +423,12 @@ export default function UserProfile({
         <div className="relative aspect-square">
           {user.image_url ? (
             <>
-              <img 
-                src={imagePreview || user.image_url} 
+              <Image
+                src={imagePreview || user.image_url}
                 alt={user.name}
-                className="w-full h-full object-cover"
-                onError={(e) => {
-                  const target = e.target as HTMLImageElement;
-                  target.style.display = 'none';
-                }}
+                fill
+                unoptimized
+                className="object-cover"
               />
               <div className="absolute bottom-4 right-4 flex gap-2">
                 <label 
@@ -504,7 +481,6 @@ export default function UserProfile({
           </Link>
           <h1 className="text-2xl font-bold">Member Details</h1>
         </div>
-        <ThemeToggle />
       </div>
 
       <Card>
@@ -907,21 +883,9 @@ export default function UserProfile({
                                   </p>
                                 </div>
                                 <div>
-                                  <Label className="text-xs text-muted-foreground">Last Active</Label>
-                                  <p className="font-medium">
-                                    {subscription.last_active_date 
-                                      ? format(new Date(subscription.last_active_date), 'MMM d, yyyy')
-                                      : 'Never'}
-                                  </p>
-                                </div>
-                                <div>
                                   <Label className="text-xs text-muted-foreground">Days Left</Label>
                                   <p className="font-medium">
-                                    {subscription.days_remaining !== null 
-                                      ? `${subscription.days_remaining} days`
-                                      : remainingDays <= 0 
-                                        ? '0 days'
-                                        : `${remainingDays} days`}
+                                    {remainingDays <= 0 ? '0 days' : `${remainingDays} days`}
                                   </p>
                                 </div>
                                 <div>
@@ -999,4 +963,3 @@ export default function UserProfile({
     </div>
   );
 }
-

@@ -49,11 +49,14 @@ export function LoginForm() {
 
       router.push('/admin/dashboard');
       router.refresh();
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const description =
+        error instanceof Error ? error.message : 'Invalid email or password';
+
       console.error('Login error:', error);
       toast({
         title: "Login failed",
-        description: error.message || "Invalid email or password",
+        description,
         variant: "destructive",
       });
     } finally {
@@ -77,7 +80,7 @@ export function LoginForm() {
             </FormItem>
           )}
         />
-        
+
         <FormField
           control={form.control}
           name="password"
@@ -85,13 +88,13 @@ export function LoginForm() {
             <FormItem>
               <FormLabel>Password</FormLabel>
               <FormControl>
-                <Input type="password" placeholder="••••••••" {...field} />
+                <Input type="password" placeholder="password" {...field} />
               </FormControl>
               <FormMessage />
             </FormItem>
           )}
         />
-        
+
         <Button type="submit" className="w-full mt-6" disabled={isLoading}>
           {isLoading ? (
             <>

@@ -1,16 +1,12 @@
 "use client";
 
-import { useState, useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-// import { ThemeButton } from '@/components/theme-toggle';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
-import { useToast } from '@/hooks/use-toast';
-import { createClient } from '@/lib/supabase/client';
 import Link from 'next/link';
 import Image from 'next/image';
 import { 
@@ -18,13 +14,9 @@ import {
   ChevronRight, 
   Search, 
   SlidersHorizontal, 
-  Calendar, 
   UserCircle,
-  Check,
-  X,
   ArrowUpDown,
   Eye,
-  LogOut
 } from 'lucide-react';
 import { 
   Select, 
@@ -38,8 +30,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover';
-import { format, isAfter, isBefore, parseISO, addDays, differenceInDays } from 'date-fns';
-import { useRouter } from 'next/navigation';
+import { isAfter, isBefore } from 'date-fns';
 
 type Member = {
   id: string;
@@ -54,11 +45,6 @@ type Member = {
     payment_date: string;
     expiration_date: string;
     total_days: number;
-    active_days: number;
-    inactive_days: number;
-    inactive_start_date: string | null;
-    days_remaining: number | null;
-    last_active_date: string | null;
     session?: string | null; // added session field
   }>;
 };
@@ -67,6 +53,7 @@ type DashboardContentProps = {
   initialMembers: Member[];
   newUsersCount: number;
   newSubscriptionsCount: number;
+  isAdmin: boolean;
 };
 
 type SortOption = {
@@ -78,112 +65,73 @@ export default function DashboardContent({
   initialMembers,
   newUsersCount,
   newSubscriptionsCount,
+  isAdmin,
 }: DashboardContentProps) {
-  const [members, setMembers] = useState<Member[]>(initialMembers);
-  const [filteredMembers, setFilteredMembers] = useState<Member[]>(initialMembers);
   const [currentPage, setCurrentPage] = useState(1);
-  const membersPerPage = 10; // You can adjust this number as needed
+  const membersPerPage = 10;
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [subscriptionFilter, setSubscriptionFilter] = useState<string>('all');
   const [sortOption, setSortOption] = useState<SortOption>({ field: 'name', direction: 'asc' });
   const [isFilterOpen, setIsFilterOpen] = useState(false);
-  const [role, setRole] = useState<string | null>(null); // Add role state
-  const router = useRouter();
-  
-  const { toast } = useToast();
-  const supabase = createClient();
+  const filteredMembers = useMemo(() => {
+    let result = [...initialMembers];
 
-  // Fetch user role on mount
-  useEffect(() => {
-    const fetchRole = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user?.id) {
-        const { data, error } = await supabase
-          .from('user_roles')
-          .select('role')
-          .eq('id', user.id)
-          .single();
-        if (data?.role) setRole(data.role);
-        else setRole(null);
-      }
-    };
-    fetchRole();
-  }, [supabase]);
-
-  // Apply filters and sort whenever search, filters or sort changes
-  useEffect(() => {
-    let result = [...members];
-    setCurrentPage(1); // Reset to first page on filter/sort/search change
-    
-    // Apply search
     if (searchQuery) {
       const query = searchQuery.toLowerCase();
-      result = result.filter(member => 
-        member.name.toLowerCase().includes(query) || 
-        member.phone.toLowerCase().includes(query) || 
+      result = result.filter((member) =>
+        member.name.toLowerCase().includes(query) ||
+        member.phone.toLowerCase().includes(query) ||
         (member.email && member.email.toLowerCase().includes(query))
       );
     }
-    
-    // Apply status filter
+
     if (statusFilter !== 'all') {
       const isActive = statusFilter === 'active';
-      result = result.filter(member => member.status === isActive);
+      result = result.filter((member) => member.status === isActive);
     }
-    
-    // Apply subscription filter
+
     if (subscriptionFilter !== 'all') {
       const today = new Date();
-      
+
       if (subscriptionFilter === 'active') {
-        result = result.filter(member => 
-          member.subscriptions.some(sub => 
-            isAfter(new Date(sub.expiration_date), today)
+        result = result.filter((member) =>
+          member.subscriptions.some((subscription) =>
+            isAfter(new Date(subscription.expiration_date), today)
           )
         );
       } else if (subscriptionFilter === 'expired') {
-        result = result.filter(member => 
-          member.subscriptions.every(sub => 
-            isBefore(new Date(sub.expiration_date), today)
+        result = result.filter((member) =>
+          member.subscriptions.every((subscription) =>
+            isBefore(new Date(subscription.expiration_date), today)
           )
         );
       }
     }
-    
-    // Apply sort
+
     result.sort((a, b) => {
       if (sortOption.field === 'name') {
-        return sortOption.direction === 'asc' 
+        return sortOption.direction === 'asc'
           ? a.name.localeCompare(b.name)
           : b.name.localeCompare(a.name);
-      } else if (sortOption.field === 'expiration') {
-        const dateA = a.subscriptions[0]?.expiration_date ? new Date(a.subscriptions[0].expiration_date).getTime() : 0;
-        const dateB = b.subscriptions[0]?.expiration_date ? new Date(b.subscriptions[0].expiration_date).getTime() : 0;
-        return sortOption.direction === 'asc' ? dateA - dateB : dateB - dateA;
       }
-      return 0;
-    });
-    
-    setFilteredMembers(result);
-  }, [members, searchQuery, statusFilter, subscriptionFilter, sortOption]);
 
-  // Function to ensure proper image URL
-  const getImageUrl = (url: string | null) => {
-    if (!url) return undefined;
-    
-    // If it's already a full URL, return it
-    if (url.startsWith('http')) return url;
-    
-    // Check which bucket the image might be in
-    const buckets = ['gym.members'];
-    for (const bucket of buckets) {
-      const { data } = supabase.storage.from(bucket).getPublicUrl(url);
-      if (data?.publicUrl) return data.publicUrl;
-    }
-    
-    return url;
-  };
+      const dateA = a.subscriptions[0]?.expiration_date
+        ? new Date(a.subscriptions[0].expiration_date).getTime()
+        : 0;
+      const dateB = b.subscriptions[0]?.expiration_date
+        ? new Date(b.subscriptions[0].expiration_date).getTime()
+        : 0;
+
+      return sortOption.direction === 'asc' ? dateA - dateB : dateB - dateA;
+    });
+
+    return result;
+  }, [initialMembers, searchQuery, statusFilter, subscriptionFilter, sortOption]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, statusFilter, subscriptionFilter, sortOption]);
 
   const getInitials = (name: string) => {
     return name
@@ -194,10 +142,6 @@ export default function DashboardContent({
       .slice(0, 2);
   };
 
-  const calculateRemainingDays = (totalDays: number, activeDays: number) => {
-    return Math.max(0, totalDays - activeDays);
-  };
-
   const getSubscriptionStatus = (member: Member) => {
     if (member.subscriptions.length === 0) {
       return { status: 'No subscription', variant: 'outline' as const };
@@ -206,20 +150,14 @@ export default function DashboardContent({
     const latestSubscription = member.subscriptions[0];
     const today = new Date();
     const expirationDate = new Date(latestSubscription.expiration_date);
-    const isExpired = isAfter(today, expirationDate);
+    const remainingDays = Math.ceil(
+      (expirationDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)
+    );
     
-    // Calculate active days from payment date until now if member is active
-    const paymentDate = new Date(latestSubscription.payment_date);
-    const currentActiveDays = member.status ? 
-      Math.floor((today.getTime() - paymentDate.getTime()) / (1000 * 60 * 60 * 24)) : 
-      latestSubscription.active_days;
-    
-    const remainingDays = calculateRemainingDays(latestSubscription.total_days, currentActiveDays);
-    
-    if (isExpired || remainingDays === 0) {
+    if (remainingDays <= 0) {
       return { status: 'Expired', variant: 'destructive' as const };
     } else if (!member.status) {
-      return { status: 'Paused', variant: 'default' as const };
+      return { status: 'Inactive', variant: 'default' as const };
     } else if (remainingDays <= 7) {
       return { status: `Expires in ${remainingDays} days`, variant: 'default' as const };
     } else {
@@ -237,14 +175,6 @@ export default function DashboardContent({
       };
     }
 
-    // If member is inactive and has remaining days
-    if (!member.status && subscription.days_remaining !== null) {
-      return { 
-        text: `${subscription.days_remaining} days`, 
-        variant: 'default' as const
-      };
-    }
-
     // Calculate remaining days using expiration date
     const today = new Date();
     const expirationDate = new Date(subscription.expiration_date);
@@ -253,7 +183,7 @@ export default function DashboardContent({
     // If subscription has expired
     if (remainingDays <= 0) {
       return { 
-        text: '0 days left', 
+        text: 'Expired', 
         variant: 'destructive' as const
       };
     }
@@ -273,6 +203,8 @@ export default function DashboardContent({
     };
   };
 
+  const totalPages = Math.max(1, Math.ceil(filteredMembers.length / membersPerPage));
+
   const paginatedMembers = useMemo(
     () =>
       filteredMembers.slice(
@@ -281,11 +213,6 @@ export default function DashboardContent({
       ),
     [filteredMembers, currentPage]
   );
-
-  const handleLogout = async () => {
-    await supabase.auth.signOut();
-    router.push('/admin/login');
-  };
 
   return (
     <div className="space-y-6">
@@ -304,13 +231,6 @@ export default function DashboardContent({
           </div>
         </Card>
       </div>
-      {/* Top bar with theme and logout buttons */}
-      <div className="flex justify-end items-center gap-2 mb-4">
-        {/* Theme button here */}
-        {/* Example: <ThemeButton /> */}
-
-      </div>
-      
       <div className="flex flex-col md:flex-row gap-4">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -392,6 +312,7 @@ export default function DashboardContent({
                       setSubscriptionFilter('all');
                       setSortOption({ field: 'name', direction: 'asc' });
                       setSearchQuery('');
+                      setCurrentPage(1);
                     }}
                   >
                     Reset Filters
@@ -421,13 +342,12 @@ export default function DashboardContent({
       
       <Card className="overflow-hidden">
         <div className="bg-muted/50 p-4">
-          <div className="grid grid-cols-7 gap-4 text-sm font-medium text-muted-foreground">
+          <div className="grid grid-cols-6 gap-4 text-sm font-medium text-muted-foreground">
             <div className="flex items-center">Profile</div>
             <div className="flex items-center">Name</div>
             <div className="flex items-center">Phone</div>
             <div className="flex items-center">Session</div>
-            <div className="flex items-center">Expiration</div>
-            <div className="flex items-center">Days Left</div>
+            <div className="flex items-center">Status</div>
             <div className="flex items-center justify-end">Actions</div>
           </div>
         </div>
@@ -446,16 +366,15 @@ export default function DashboardContent({
               const subscriptionStatus = getSubscriptionStatus(member);
               const daysLeft = getDaysLeftDisplay(member);
               const sessionValue = member.subscriptions[0]?.session ?? 'Not set';
-              const imageUrl = getImageUrl(member.image_url);
               
               return (
                 <div key={member.id} className="p-4">
-                  <div className="grid grid-cols-7 gap-4 items-center">
+                  <div className="grid grid-cols-6 gap-4 items-center">
                     <div className="flex items-center">
                       <Avatar className="h-16 w-16 overflow-hidden">
-                        {imageUrl ? (
+                        {member.image_url ? (
                           <Image
-                            src={imageUrl}
+                            src={member.image_url}
                             alt={member.name}
                             width={64}
                             height={64}
@@ -483,12 +402,6 @@ export default function DashboardContent({
                     <div className="flex items-center">
                       <span className="text-sm capitalize">{sessionValue}</span>
                     </div>
-                    
-                    <div className="flex items-center">
-                      <Badge variant={subscriptionStatus.variant}>
-                        {subscriptionStatus.status}
-                      </Badge>
-                    </div>
 
                     <div className="flex items-center">
                       <Badge variant={daysLeft.variant}>
@@ -497,7 +410,7 @@ export default function DashboardContent({
                     </div>
                     
                     <div className="flex items-center justify-end">
-                      {role === 'admin' && (
+                      {isAdmin && (
                         <Link href={`/admin/user/${member.id}`}>
                           <Button variant="ghost" size="sm">
                             <Eye className="h-4 w-4 mr-1" />
@@ -526,13 +439,13 @@ export default function DashboardContent({
             <ChevronLeft className="h-4 w-4" />
           </Button>
           <span className="text-sm">
-            Page {currentPage} of {Math.ceil(filteredMembers.length / membersPerPage)}
+            Page {currentPage} of {totalPages}
           </span>
           <Button
             variant="outline"
             size="sm"
-            onClick={() => setCurrentPage((prev) => Math.min(Math.ceil(filteredMembers.length / membersPerPage), prev + 1))}
-            disabled={currentPage === Math.ceil(filteredMembers.length / membersPerPage)}
+            onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
+            disabled={currentPage === totalPages}
           >
             <ChevronRight className="h-4 w-4" />
           </Button>

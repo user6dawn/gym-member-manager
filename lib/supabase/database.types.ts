@@ -21,6 +21,7 @@ export interface Database {
           created_at: string
           address: string | null
           gender: string | null
+          remarks: string | null
         }
         Insert: {
           id?: string
@@ -33,6 +34,7 @@ export interface Database {
           created_at?: string
           address?: string | null
           gender?: string | null
+          remarks?: string | null
         }
         Update: {
           id?: string
@@ -45,6 +47,7 @@ export interface Database {
           created_at?: string
           address?: string | null
           gender?: string | null
+          remarks?: string | null
         }
       }
       subscriptions: {
@@ -55,10 +58,7 @@ export interface Database {
           expiration_date: string
           created_at: string
           total_days: number
-          active_days: number
-          inactive_days: number
-          inactive_start_date: string | null
-          days_remaining: number | null
+          session: string | null
         }
         Insert: {
           id?: string
@@ -67,10 +67,7 @@ export interface Database {
           expiration_date: string
           created_at?: string
           total_days: number
-          active_days?: number
-          inactive_days?: number
-          inactive_start_date?: string | null
-          days_remaining?: number | null
+          session?: string | null
         }
         Update: {
           id?: string
@@ -79,10 +76,21 @@ export interface Database {
           expiration_date?: string
           created_at?: string
           total_days?: number
-          active_days?: number
-          inactive_days?: number
-          inactive_start_date?: string | null
-          days_remaining?: number | null
+          session?: string | null
+        }
+      }
+      user_roles: {
+        Row: {
+          id: string
+          role: string
+        }
+        Insert: {
+          id: string
+          role: string
+        }
+        Update: {
+          id?: string
+          role?: string
         }
       }
     }

@@ -1,6 +1,15 @@
 import { createServerClient } from '@/lib/supabase/server';
 import AdminStatsContent from '@/components/admin-stats-content';
 
+type RecentUserRow = {
+  created_at: string;
+};
+
+type RecentSubscriptionRow = {
+  payment_date: string;
+  session: string | null;
+};
+
 export default async function AdminStatsPage() {
   const supabase = createServerClient();
 
@@ -60,19 +69,18 @@ export default async function AdminStatsPage() {
   };
 
   const userGrowth = aggregateByDate(
-    (recentUsers ?? []).map((u) => (u as { created_at: string }).created_at),
+    ((recentUsers ?? []) as RecentUserRow[]).map((userRow) => userRow.created_at),
   );
 
   const subscriptionGrowth = aggregateByDate(
-    (recentSubscriptions ?? []).map(
-      (s) => (s as { payment_date: string }).payment_date,
+    ((recentSubscriptions ?? []) as RecentSubscriptionRow[]).map(
+      (subscriptionRow) => subscriptionRow.payment_date,
     ),
   );
 
   const sessionCounts = new Map<string, number>();
 
-  (recentSubscriptions ?? []).forEach((s) => {
-    const { session } = s as { session: string | null };
+  ((recentSubscriptions ?? []) as RecentSubscriptionRow[]).forEach(({ session }) => {
     const key = session ?? 'Unknown';
     sessionCounts.set(key, (sessionCounts.get(key) ?? 0) + 1);
   });

@@ -13,6 +13,7 @@ import { useToast } from '@/hooks/use-toast';
 import { createClient } from '@/lib/supabase/client';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { sendNewUserEmail } from '@/lib/email';
+import Image from 'next/image';
 
 const formSchema = z.object({
   name: z.string().min(2, { message: 'Name must be at least 2 characters.' }),
@@ -150,7 +151,7 @@ export function MemberForm() {
           .from('gym.members')
           .upload(filePath, image, {
             cacheControl: '31536000',
-            upsert: true
+            upsert: false
           });
 
         if (uploadError) throw uploadError;
@@ -311,10 +312,13 @@ export function MemberForm() {
                 <div className="flex items-center gap-4">
                   {imagePreview && (
                     <div className="w-20 h-20 rounded-full overflow-hidden border">
-                      <img 
-                        src={imagePreview} 
-                        alt="Profile preview" 
-                        className="w-full h-full object-cover"
+                      <Image
+                        src={imagePreview}
+                        alt="Profile preview"
+                        width={80}
+                        height={80}
+                        unoptimized
+                        className="h-full w-full object-cover"
                       />
                     </div>
                   )}
