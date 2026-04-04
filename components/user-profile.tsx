@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { format, addDays } from 'date-fns';
+import { format, addDays, differenceInCalendarDays } from 'date-fns';
 import { createClient } from '@/lib/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 
@@ -86,13 +86,22 @@ const userSchema = z.object({
    remarks: z.string().optional().or(z.literal('')),
 });
 
+const calculateSubscriptionDays = (startDate: Date, endDate: Date) =>
+  differenceInCalendarDays(endDate, startDate);
+
 const subscriptionSchema = z.object({
   start_date: z.date({ required_error: 'Start date is required' }),
-  total_days: z.number().min(1, { message: 'Total days must be at least 1' }),
+  end_date: z.date({ required_error: 'End date is required' }),
   session: z.enum(['morning', 'afternoon', 'night'], {
     required_error: 'Please select a session time',
   }),
-});
+}).refine(
+  (values) => calculateSubscriptionDays(values.start_date, values.end_date) > 0,
+  {
+    message: 'End date must be after start date',
+    path: ['end_date'],
+  }
+);
 
 // Add function to calculate subscription status
 const getSubscriptionStatus = (subscription: SubscriptionType) => {
@@ -179,10 +188,17 @@ export default function UserProfile({
     resolver: zodResolver(subscriptionSchema),
     defaultValues: {
       start_date: new Date(),
-      total_days: 30,
+      end_date: addDays(new Date(), 30),
       session: 'morning',
     },
   });
+
+  const subscriptionStartDate = subscriptionForm.watch('start_date');
+  const subscriptionEndDate = subscriptionForm.watch('end_date');
+  const calculatedTotalDays =
+    subscriptionStartDate && subscriptionEndDate
+      ? calculateSubscriptionDays(subscriptionStartDate, subscriptionEndDate)
+      : 0;
 
   const getInitials = (name: string) => {
     return name
@@ -306,16 +322,18 @@ export default function UserProfile({
     try {
       setIsAddingSubscription(true);
       
-      const formattedDate = format(values.start_date, 'yyyy-MM-dd');
+      const formattedStartDate = format(values.start_date, 'yyyy-MM-dd');
+      const formattedEndDate = format(values.end_date, 'yyyy-MM-dd');
+      const totalDays = calculateSubscriptionDays(values.start_date, values.end_date);
       
       const { error } = await supabase
         .from('subscriptions')
         .insert({
           user_id: user.id,
-          created_at: formattedDate,
-          payment_date: formattedDate,
-          expiration_date: format(addDays(values.start_date, values.total_days), 'yyyy-MM-dd'),
-          total_days: values.total_days,
+          created_at: formattedStartDate,
+          payment_date: formattedStartDate,
+          expiration_date: formattedEndDate,
+          total_days: totalDays,
           session: values.session,
         })
         .select()
@@ -340,7 +358,7 @@ export default function UserProfile({
       
       subscriptionForm.reset({
         start_date: new Date(),
-        total_days: 30,
+        end_date: addDays(new Date(), 30),
         session: 'morning',
       });
       
@@ -746,7 +764,7 @@ export default function UserProfile({
                     <DialogHeader>
                       <DialogTitle>Add New Subscription</DialogTitle>
                       <DialogDescription>
-                        Enter the payment and expiration dates for the new subscription.
+                        Select the subscription start and end dates. Total days will be calculated automatically.
                       </DialogDescription>
                     </DialogHeader>
                     
@@ -809,24 +827,60 @@ export default function UserProfile({
                         
                         <FormField
                           control={subscriptionForm.control}
-                          name="total_days"
+                          name="end_date"
                           render={({ field }) => (
-                            <FormItem>
-                              <FormLabel>Total Days</FormLabel>
-                              <FormControl>
-                                <Input 
-                                  type="number" 
-                                  {...field} 
-                                  onChange={(e) => field.onChange(parseInt(e.target.value))}
-                                />
-                              </FormControl>
+                            <FormItem className="flex flex-col">
+                              <FormLabel>End Date</FormLabel>
+                              <Popover>
+                                <PopoverTrigger asChild>
+                                  <FormControl>
+                                    <Button
+                                      variant="outline"
+                                      className="w-full justify-start text-left font-normal"
+                                    >
+                                      <CalendarIcon className="mr-2 h-4 w-4" />
+                                      {field.value ? format(field.value, 'PPP') : <span>Pick a date</span>}
+                                    </Button>
+                                  </FormControl>
+                                </PopoverTrigger>
+                                <PopoverContent className="w-auto p-0">
+                                  <Calendar
+                                    mode="single"
+                                    selected={field.value}
+                                    onSelect={field.onChange}
+                                    disabled={(date) =>
+                                      subscriptionStartDate
+                                        ? calculateSubscriptionDays(subscriptionStartDate, date) <= 0
+                                        : false
+                                    }
+                                    initialFocus
+                                  />
+                                </PopoverContent>
+                              </Popover>
                               <FormMessage />
                             </FormItem>
                           )}
                         />
+
+                        <div className="space-y-2">
+                          <Label>Total Days</Label>
+                          <Input
+                            value={
+                              calculatedTotalDays > 0
+                                ? `${calculatedTotalDays} ${calculatedTotalDays === 1 ? 'day' : 'days'}`
+                                : ''
+                            }
+                            placeholder="Select a valid date range"
+                            disabled
+                            readOnly
+                          />
+                        </div>
                         
                         <DialogFooter>
-                          <Button type="submit" disabled={isAddingSubscription}>
+                          <Button
+                            type="submit"
+                            disabled={isAddingSubscription || calculatedTotalDays <= 0}
+                          >
                             {isAddingSubscription ? (
                               <>
                                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
