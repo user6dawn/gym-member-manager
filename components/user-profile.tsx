@@ -90,18 +90,11 @@ const calculateSubscriptionDays = (startDate: Date, endDate: Date) =>
   differenceInCalendarDays(endDate, startDate);
 
 const subscriptionSchema = z.object({
-  start_date: z.date({ required_error: 'Start date is required' }),
-  end_date: z.date({ required_error: 'End date is required' }),
+  total_days: z.number({ required_error: 'Total days is required' }).min(1, { message: 'Total days must be at least 1' }),
   session: z.enum(['morning', 'afternoon', 'night'], {
     required_error: 'Please select a session time',
   }),
-}).refine(
-  (values) => calculateSubscriptionDays(values.start_date, values.end_date) > 0,
-  {
-    message: 'End date must be after start date',
-    path: ['end_date'],
-  }
-);
+});
 
 // Add function to calculate subscription status
 const getSubscriptionStatus = (subscription: SubscriptionType) => {
@@ -187,18 +180,14 @@ export default function UserProfile({
   const subscriptionForm = useForm<z.infer<typeof subscriptionSchema>>({
     resolver: zodResolver(subscriptionSchema),
     defaultValues: {
-      start_date: new Date(),
-      end_date: addDays(new Date(), 30),
+      total_days: 30,
       session: 'morning',
     },
   });
 
-  const subscriptionStartDate = subscriptionForm.watch('start_date');
-  const subscriptionEndDate = subscriptionForm.watch('end_date');
-  const calculatedTotalDays =
-    subscriptionStartDate && subscriptionEndDate
-      ? calculateSubscriptionDays(subscriptionStartDate, subscriptionEndDate)
-      : 0;
+  const subscriptionTotalDays = subscriptionForm.watch('total_days');
+  const subscriptionStartDate = new Date();
+  const calculatedEndDate = addDays(subscriptionStartDate, subscriptionTotalDays || 0);
 
   const getInitials = (name: string) => {
     return name
@@ -322,9 +311,10 @@ export default function UserProfile({
     try {
       setIsAddingSubscription(true);
       
-      const formattedStartDate = format(values.start_date, 'yyyy-MM-dd');
-      const formattedEndDate = format(values.end_date, 'yyyy-MM-dd');
-      const totalDays = calculateSubscriptionDays(values.start_date, values.end_date);
+      const startDate = new Date();
+      const endDate = addDays(startDate, values.total_days);
+      const formattedStartDate = format(startDate, 'yyyy-MM-dd');
+      const formattedEndDate = format(endDate, 'yyyy-MM-dd');
       
       const { error } = await supabase
         .from('subscriptions')
@@ -333,7 +323,7 @@ export default function UserProfile({
           created_at: formattedStartDate,
           payment_date: formattedStartDate,
           expiration_date: formattedEndDate,
-          total_days: totalDays,
+          total_days: values.total_days,
           session: values.session,
         })
         .select()
@@ -357,8 +347,7 @@ export default function UserProfile({
       });
       
       subscriptionForm.reset({
-        start_date: new Date(),
-        end_date: addDays(new Date(), 30),
+        total_days: 30,
         session: 'morning',
       });
       
@@ -764,122 +753,81 @@ export default function UserProfile({
                     <DialogHeader>
                       <DialogTitle>Add New Subscription</DialogTitle>
                       <DialogDescription>
-                        Select the subscription start and end dates. Total days will be calculated automatically.
+                        Enter the total subscription days and session time. The start date is today and the end date is calculated automatically.
                       </DialogDescription>
                     </DialogHeader>
                     
                     <Form {...subscriptionForm}>
                       <form onSubmit={subscriptionForm.handleSubmit(onSubscriptionSubmit)} className="space-y-4">
-                        <FormField
-                          control={subscriptionForm.control}
-                          name="start_date"
-                          render={({ field }) => (
-                            <FormItem className="flex flex-col">
-                              <FormLabel>Start Date</FormLabel>
-                              <Popover>
-                                <PopoverTrigger asChild>
-                                  <FormControl>
-                                    <Button
-                                      variant="outline"
-                                      className="w-full justify-start text-left font-normal"
-                                    >
-                                      <CalendarIcon className="mr-2 h-4 w-4" />
-                                      {field.value ? format(field.value, 'PPP') : <span>Pick a date</span>}
-                                    </Button>
-                                  </FormControl>
-                                </PopoverTrigger>
-                                <PopoverContent className="w-auto p-0">
-                                  <Calendar
-                                    mode="single"
-                                    selected={field.value}
-                                    onSelect={field.onChange}
-                                    initialFocus
-                                  />
-                                </PopoverContent>
-                              </Popover>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
-                        
-                        <FormField
-                          control={subscriptionForm.control}
-                          name="session"
-                          render={({ field }) => (
-                            <FormItem>
-                              <FormLabel>Session Time</FormLabel>
-                              <Select onValueChange={field.onChange} defaultValue={field.value}>
-                                <FormControl>
-                                  <SelectTrigger>
-                                    <SelectValue placeholder="Select session time" />
-                                  </SelectTrigger>
-                                </FormControl>
-                                <SelectContent>
-                                  <SelectItem value="morning">Morning</SelectItem>
-                                  <SelectItem value="afternoon">Afternoon</SelectItem>
-                                  <SelectItem value="night">Night</SelectItem>
-                                </SelectContent>
-                              </Select>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
-                        
-                        <FormField
-                          control={subscriptionForm.control}
-                          name="end_date"
-                          render={({ field }) => (
-                            <FormItem className="flex flex-col">
-                              <FormLabel>End Date</FormLabel>
-                              <Popover>
-                                <PopoverTrigger asChild>
-                                  <FormControl>
-                                    <Button
-                                      variant="outline"
-                                      className="w-full justify-start text-left font-normal"
-                                    >
-                                      <CalendarIcon className="mr-2 h-4 w-4" />
-                                      {field.value ? format(field.value, 'PPP') : <span>Pick a date</span>}
-                                    </Button>
-                                  </FormControl>
-                                </PopoverTrigger>
-                                <PopoverContent className="w-auto p-0">
-                                  <Calendar
-                                    mode="single"
-                                    selected={field.value}
-                                    onSelect={field.onChange}
-                                    disabled={(date) =>
-                                      subscriptionStartDate
-                                        ? calculateSubscriptionDays(subscriptionStartDate, date) <= 0
-                                        : false
-                                    }
-                                    initialFocus
-                                  />
-                                </PopoverContent>
-                              </Popover>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
+                        <div className="grid gap-4">
+                          <div className="space-y-2">
+                            <Label>Start Date</Label>
+                            <Input
+                              value={format(subscriptionStartDate, 'PPP')}
+                              disabled
+                              readOnly
+                              className="bg-muted/50"
+                            />
+                          </div>
 
-                        <div className="space-y-2">
-                          <Label>Total Days</Label>
-                          <Input
-                            value={
-                              calculatedTotalDays > 0
-                                ? `${calculatedTotalDays} ${calculatedTotalDays === 1 ? 'day' : 'days'}`
-                                : ''
-                            }
-                            placeholder="Select a valid date range"
-                            disabled
-                            readOnly
+                          <FormField
+                            control={subscriptionForm.control}
+                            name="total_days"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>Total Days</FormLabel>
+                                <FormControl>
+                                  <Input
+                                    type="number"
+                                    min={1}
+                                    {...field}
+                                    value={field.value}
+                                    onChange={(e) => field.onChange(Number(e.target.value))}
+                                  />
+                                </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
                           />
+
+                          <FormField
+                            control={subscriptionForm.control}
+                            name="session"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>Session Time</FormLabel>
+                                <Select onValueChange={field.onChange} defaultValue={field.value}>
+                                  <FormControl>
+                                    <SelectTrigger>
+                                      <SelectValue placeholder="Select session time" />
+                                    </SelectTrigger>
+                                  </FormControl>
+                                  <SelectContent>
+                                    <SelectItem value="morning">Morning</SelectItem>
+                                    <SelectItem value="afternoon">Afternoon</SelectItem>
+                                    <SelectItem value="night">Night</SelectItem>
+                                  </SelectContent>
+                                </Select>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+
+                          <div className="space-y-2">
+                            <Label>End Date</Label>
+                            <Input
+                              value={format(calculatedEndDate, 'PPP')}
+                              disabled
+                              readOnly
+                              className="bg-muted/50"
+                            />
+                          </div>
                         </div>
                         
                         <DialogFooter>
                           <Button
                             type="submit"
-                            disabled={isAddingSubscription || calculatedTotalDays <= 0}
+                            disabled={isAddingSubscription || subscriptionTotalDays <= 0}
                           >
                             {isAddingSubscription ? (
                               <>
