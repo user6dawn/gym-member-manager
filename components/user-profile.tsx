@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { format, addDays, differenceInCalendarDays } from 'date-fns';
+import { format, addDays } from 'date-fns';
 import { createClient } from '@/lib/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 
@@ -27,12 +27,6 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog';
-import { Calendar } from '@/components/ui/calendar';
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from '@/components/ui/popover';
 import {
   Select,
   SelectTrigger,
@@ -42,7 +36,6 @@ import {
 } from '@/components/ui/select';
 import {
   ArrowLeft,
-  Calendar as CalendarIcon,
   Loader2,
   Plus,
   Upload,
@@ -52,7 +45,7 @@ import {
 import Link from 'next/link';
 import Image from 'next/image';
 import { MemberStatusToggle } from '@/components/member-status-toggle';
-import { ThemeToggle } from '@/components/theme-toggle';
+import { validateImageFile, compressImage, blobToFile } from '@/lib/image-utils';
 
 type UserType = {
   id: string;
@@ -85,9 +78,6 @@ const userSchema = z.object({
   gender: z.string().optional().or(z.literal('')),
    remarks: z.string().optional().or(z.literal('')),
 });
-
-const calculateSubscriptionDays = (startDate: Date, endDate: Date) =>
-  differenceInCalendarDays(endDate, startDate);
 
 const subscriptionSchema = z.object({
   total_days: z.number({ required_error: 'Total days is required' }).min(1, { message: 'Total days must be at least 1' }),
@@ -156,10 +146,11 @@ export default function UserProfile({
   const [isSubscriptionDialogOpen, setIsSubscriptionDialogOpen] = useState(false);
   const [currentStatus, setCurrentStatus] = useState(user.status);
   const [isImageModalOpen, setIsImageModalOpen] = useState(false);
-  const [isUploadingImage, setIsUploadingImage] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
-  
+  const [localUser, setLocalUser] = useState(user);
+  const [localSubscriptions, setLocalSubscriptions] = useState(subscriptions);
+
   const router = useRouter();
   const { toast } = useToast();
   const supabase = createClient();
@@ -167,13 +158,13 @@ export default function UserProfile({
   const userForm = useForm<z.infer<typeof userSchema>>({
     resolver: zodResolver(userSchema),
     defaultValues: {
-      name: user.name,
-      phone: user.phone,
-      email: user.email || '',
+      name: localUser.name,
+      phone: localUser.phone,
+      email: localUser.email || '',
       status: currentStatus,
-      address: user.address || '',
-      gender: user.gender || '',
-      remarks: user.remarks || '',
+      address: localUser.address || '',
+      gender: localUser.gender || '',
+      remarks: localUser.remarks || '',
     },
   });
   
@@ -201,52 +192,65 @@ export default function UserProfile({
   const handleImageChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0] || null;
     if (file) {
+      // Validate image
+      const validation = validateImageFile(file);
+      if (!validation.valid) {
+        toast({
+          title: "Invalid image",
+          description: validation.error,
+          variant: "destructive",
+        });
+        return;
+      }
+
       try {
-        setIsUploadingImage(true);
-        
+        // Compress image
+        const compressedBlob = await compressImage(file);
+        const compressedFile = blobToFile(compressedBlob, file);
+
         // Create a preview URL
-        const previewUrl = URL.createObjectURL(file);
+        const previewUrl = URL.createObjectURL(compressedFile);
         setImagePreview(previewUrl);
-        
+
         // Upload image to Supabase
-        const fileExt = file.name.split('.').pop();
-        const fileName = `${user.id}-${Date.now()}.${fileExt}`;
+        const fileExt = compressedFile.name.split('.').pop();
+        const fileName = `${localUser.id}-${Date.now()}.${fileExt}`;
         const filePath = `profiles/${fileName}`;
-        
+
         const { error: uploadError } = await supabase
           .storage
           .from('gym.members')
-          .upload(filePath, file, { 
+          .upload(filePath, compressedFile, {
             upsert: false,
             cacheControl: '31536000'
           });
-          
+
         if (uploadError) throw uploadError;
-        
+
         // Get the public URL
         const { data: { publicUrl } } = supabase
           .storage
           .from('gym.members')
           .getPublicUrl(filePath);
-      
+
         // Update the user with the new image URL
         const { error: imageUpdateError } = await supabase
           .from('users')
           .update({ image_url: publicUrl })
-          .eq('id', user.id);
-        
+          .eq('id', localUser.id);
+
         if (imageUpdateError) throw imageUpdateError;
+
+        // Optimistic update
+        setLocalUser({ ...localUser, image_url: publicUrl });
 
         // Cleanup preview URL
         URL.revokeObjectURL(previewUrl);
-        
+
         toast({
           title: "Image uploaded",
           description: "Profile picture has been updated successfully.",
         });
-
-        // Force a refresh to get the updated user data
-        router.refresh();
       } catch (error) {
         console.error('Error uploading image:', error);
         toast({
@@ -254,8 +258,6 @@ export default function UserProfile({
           description: "There was a problem uploading the profile picture.",
           variant: "destructive",
         });
-      } finally {
-        setIsUploadingImage(false);
       }
     }
   };
@@ -273,7 +275,20 @@ export default function UserProfile({
   const onUserSubmit = async (values: z.infer<typeof userSchema>) => {
     try {
       setIsUpdating(true);
-      
+
+      // Optimistic update
+      const previousUser = { ...localUser };
+      setLocalUser({
+        ...localUser,
+        name: values.name,
+        phone: values.phone,
+        email: values.email || null,
+        address: values.address || null,
+        gender: values.gender || null,
+        status: values.status,
+        remarks: values.remarks || null,
+      });
+
       const { error: updateError } = await supabase
         .from('users')
         .update({
@@ -285,16 +300,18 @@ export default function UserProfile({
           status: values.status,
           remarks: values.remarks || null,
         })
-        .eq('id', user.id);
-        
-      if (updateError) throw updateError;
-      
+        .eq('id', localUser.id);
+
+      if (updateError) {
+        // Revert on error
+        setLocalUser(previousUser);
+        throw updateError;
+      }
+
       toast({
         title: "Profile updated",
         description: "Member information has been updated successfully.",
       });
-      
-      router.refresh();
     } catch (error) {
       console.error('Error updating profile:', error);
       toast({
@@ -310,16 +327,34 @@ export default function UserProfile({
   const onSubscriptionSubmit = async (values: z.infer<typeof subscriptionSchema>) => {
     try {
       setIsAddingSubscription(true);
-      
+
       const startDate = new Date();
       const endDate = addDays(startDate, values.total_days);
       const formattedStartDate = format(startDate, 'yyyy-MM-dd');
       const formattedEndDate = format(endDate, 'yyyy-MM-dd');
-      
-      const { error } = await supabase
+
+      // Optimistic update
+      const previousSubscriptions = [...localSubscriptions];
+      const previousStatus = localUser.status;
+
+      const newSubscription = {
+        id: `temp-${Date.now()}`,
+        created_at: formattedStartDate,
+        total_days: values.total_days,
+        expiration_date: formattedEndDate,
+        session: values.session as 'morning' | 'afternoon' | 'night',
+      };
+
+      setLocalSubscriptions([newSubscription, ...localSubscriptions]);
+      if (!localUser.status) {
+        setCurrentStatus(true);
+        setLocalUser({ ...localUser, status: true });
+      }
+
+      const { error, data } = await supabase
         .from('subscriptions')
         .insert({
-          user_id: user.id,
+          user_id: localUser.id,
           created_at: formattedStartDate,
           payment_date: formattedStartDate,
           expiration_date: formattedEndDate,
@@ -328,32 +363,29 @@ export default function UserProfile({
         })
         .select()
         .single();
-        
-      if (error) throw error;
-      
-      // Update user status to active if not already active
-      if (!user.status) {
-        const { error: statusError } = await supabase
-          .from('users')
-          .update({ status: true })
-          .eq('id', user.id);
-          
-        if (statusError) throw statusError;
+
+      if (error) {
+        // Revert on error
+        setLocalSubscriptions(previousSubscriptions);
+        setCurrentStatus(previousStatus);
+        setLocalUser({ ...localUser, status: previousStatus });
+        throw error;
       }
-      
+
+      // Update with real data
+      setLocalSubscriptions([data, ...previousSubscriptions]);
+
       toast({
         title: "Subscription added",
         description: "The subscription has been added successfully.",
       });
-      
+
       subscriptionForm.reset({
         total_days: 30,
         session: 'morning',
       });
-      
+
       setIsSubscriptionDialogOpen(false);
-      
-      router.refresh();
     } catch (error) {
       console.error('Error adding subscription:', error);
       toast({
@@ -374,7 +406,7 @@ export default function UserProfile({
       const { error } = await supabase
         .from('users')
         .delete()
-        .eq('id', user.id);
+        .eq('id', localUser.id);
 
       if (error) throw error;
 
@@ -402,10 +434,13 @@ export default function UserProfile({
   useEffect(() => {
     const channel = supabase
       .channel('status_changes')
-      .on('postgres_changes', 
-        { event: 'UPDATE', schema: 'public', table: 'users', filter: `id=eq.${user.id}` },
-        () => {
-          router.refresh();
+      .on('postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'users', filter: `id=eq.${localUser.id}` },
+        (payload) => {
+          // Update local state with real-time changes
+          if (payload.new) {
+            setLocalUser(payload.new as UserType);
+          }
         }
       )
       .subscribe();
@@ -413,7 +448,7 @@ export default function UserProfile({
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [user.id, supabase, router]);
+  }, [localUser.id, supabase]);
 
   const getMemberStatus = () => {
     if (!currentStatus) {
@@ -434,7 +469,6 @@ export default function UserProfile({
                 src={imagePreview || user.image_url}
                 alt={user.name}
                 fill
-                unoptimized
                 className="object-cover"
               />
               <div className="absolute bottom-4 right-4 flex gap-2">
@@ -499,10 +533,10 @@ export default function UserProfile({
                   className="h-16 w-16 relative cursor-pointer transition-transform hover:scale-105"
                   onClick={() => setIsImageModalOpen(true)}
                 >
-                  {user.image_url ? (
-                    <AvatarImage 
-                      src={user.image_url} 
-                      alt={user.name}
+                  {localUser.image_url ? (
+                    <AvatarImage
+                      src={localUser.image_url}
+                      alt={localUser.name}
                       className="h-full w-full object-cover"
                       onError={(e) => {
                         const target = e.target as HTMLImageElement;
@@ -513,7 +547,7 @@ export default function UserProfile({
                     />
                   ) : (
                     <AvatarFallback className="text-lg">
-                      {getInitials(user.name)}
+                      {getInitials(localUser.name)}
                     </AvatarFallback>
                   )}
                 </Avatar>
@@ -532,8 +566,8 @@ export default function UserProfile({
                 </label>
               </div>
               <div>
-                <CardTitle>{user.name}</CardTitle>
-                <CardDescription>Member since {format(new Date(user.created_at), 'MMMM d, yyyy')}</CardDescription>
+                <CardTitle>{localUser.name}</CardTitle>
+                <CardDescription>Member since {format(new Date(localUser.created_at), 'MMMM d, yyyy')}</CardDescription>
               </div>
             </div> */}
             <div className="flex items-center gap-4">
@@ -542,10 +576,10 @@ export default function UserProfile({
                   className="h-16 w-16 relative cursor-pointer transition-transform hover:scale-105"
                   onClick={() => setIsImageModalOpen(true)}
                 >
-                  {user.image_url ? (
-                    <AvatarImage 
-                      src={user.image_url} 
-                      alt={user.name}
+                  {localUser.image_url ? (
+                    <AvatarImage
+                      src={localUser.image_url}
+                      alt={localUser.name}
                       className="h-full w-full object-cover"
                       onError={(e) => {
                         const target = e.target as HTMLImageElement;
@@ -556,7 +590,7 @@ export default function UserProfile({
                     />
                   ) : (
                     <AvatarFallback className="text-lg">
-                      {getInitials(user.name)}
+                      {getInitials(localUser.name)}
                     </AvatarFallback>
                   )}
                 </Avatar>
@@ -575,8 +609,8 @@ export default function UserProfile({
                 </label>
               </div>
               <div>
-                <CardTitle>{user.name}</CardTitle>
-                <CardDescription>Member since {format(new Date(user.created_at), 'MMMM d, yyyy')}</CardDescription>
+                <CardTitle>{localUser.name}</CardTitle>
+                <CardDescription>Member since {format(new Date(localUser.created_at), 'MMMM d, yyyy')}</CardDescription>
               </div>
             </div>
             {(() => {
@@ -594,7 +628,7 @@ export default function UserProfile({
           <Tabs defaultValue="details">
             <TabsList className="grid w-full grid-cols-2">
               <TabsTrigger value="details">Personal Details</TabsTrigger>
-              <TabsTrigger value="subscriptions">Subscriptions</TabsTrigger>
+              <TabsTrigger value="subscriptions">Subscriptions ({localSubscriptions.length})</TabsTrigger>
             </TabsList>
             
             <TabsContent value="details" className="space-y-6 pt-4">
@@ -712,10 +746,10 @@ export default function UserProfile({
                           <FormItem className="flex flex-row items-center space-x-2 space-y-0">
                             <FormControl>
                               <MemberStatusToggle
-                                userId={user.id}
+                                userId={localUser.id}
                                 isActive={field.value}
-                                latestSubscription={subscriptions[0]}
-                                onStatusChange={handleStatusChange}
+                                latestSubscription={localSubscriptions[0]}
+                                onStatusChangeAction={handleStatusChange}
                               />
                             </FormControl>
                             <FormLabel>Active Member</FormLabel>
@@ -855,7 +889,7 @@ export default function UserProfile({
                 </div>
               ) : (
                 <div className="space-y-4">
-                  {subscriptions.map((subscription) => {
+                  {localSubscriptions.map((subscription) => {
                     const statusState = getSubscriptionStatus(subscription);
                     const today = new Date();
                     const expirationDate = new Date(subscription.expiration_date);

@@ -3,7 +3,6 @@
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
 import { createClient } from "@/lib/supabase/client";
-import { useRouter } from "next/navigation";
 
 type Subscription = {
   id: string;
@@ -13,7 +12,7 @@ type MemberStatusToggleProps = {
   userId: string;
   isActive: boolean;
   latestSubscription?: Subscription;
-  onStatusChange?: (newStatus: boolean) => void;
+  onStatusChangeAction?: (newStatus: boolean) => void;
   className?: string;
 };
 
@@ -21,12 +20,11 @@ export function MemberStatusToggle({
   userId,
   isActive,
   latestSubscription,
-  onStatusChange,
+  onStatusChangeAction,
   className,
 }: MemberStatusToggleProps) {
   const { toast } = useToast();
   const supabase = createClient();
-  const router = useRouter();
 
   const handleStatusChange = async (newStatus: boolean) => {
     try {
@@ -39,21 +37,25 @@ export function MemberStatusToggle({
         return;
       }
 
+      // Optimistic update
+      onStatusChangeAction?.(newStatus);
+
       // Update user status
       const { error: userError } = await supabase
         .from("users")
         .update({ status: newStatus })
         .eq("id", userId);
 
-      if (userError) throw new Error(userError.message);
+      if (userError) {
+        // Revert on error
+        onStatusChangeAction?.(isActive);
+        throw new Error(userError.message);
+      }
 
       toast({
         title: "Status Updated",
         description: `Member is now ${newStatus ? "active" : "inactive"}.`,
       });
-
-      onStatusChange?.(newStatus);
-      router.refresh();
     } catch (error) {
       console.error("Toggle error:", error);
       toast({
@@ -64,7 +66,7 @@ export function MemberStatusToggle({
             : "Failed to update member status.",
         variant: "destructive",
       });
-      onStatusChange?.(isActive); // revert UI switch
+      onStatusChangeAction?.(isActive); // revert UI switch
     }
   };
 

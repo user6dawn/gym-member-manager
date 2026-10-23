@@ -1,8 +1,10 @@
 import { createServerClient } from '@/lib/supabase/server';
-import { notFound } from 'next/navigation';
+import { notFound, redirect } from 'next/navigation';
 import UserProfile from '@/components/user-profile';
 import { Suspense } from 'react';
 import { UserDetailSkeleton } from '@/components/skeletons';
+
+export const dynamic = 'force-dynamic';
 
 export default async function UserDetailPage({
   params,
@@ -11,6 +13,18 @@ export default async function UserDetailPage({
 }) {
   const { id } = params;
   const supabase = createServerClient();
+
+  const {
+    data: { user: authUser },
+  } = await supabase.auth.getUser();
+  if (!authUser) redirect('/admin/login');
+
+  const { data: roleRow, error: roleError } = await supabase
+    .from('user_roles')
+    .select('role')
+    .eq('id', authUser.id)
+    .single();
+  if (roleError || roleRow?.role !== 'admin') redirect('/admin/dashboard');
 
   // Fetch user data
   const { data: user, error } = await supabase

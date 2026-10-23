@@ -6,7 +6,7 @@ import type { Database } from '@/lib/supabase/database.types';
 export async function middleware(req: NextRequest) {
   const res = NextResponse.next();
   const supabase = createMiddlewareClient<Database>({ req, res });
-  
+
   const {
     data: { session },
   } = await supabase.auth.getSession();
@@ -23,10 +23,34 @@ export async function middleware(req: NextRequest) {
     return NextResponse.redirect(redirectUrl);
   }
 
-  // If already logged in and trying to access login page, redirect to dashboard
-  if (session && pathname === '/admin/login') {
-    const redirectUrl = new URL('/admin/dashboard', req.url);
-    return NextResponse.redirect(redirectUrl);
+  let role: string | null = null;
+  if (session?.user?.id) {
+    const { data: roleData, error: roleError } = await supabase
+      .from('user_roles')
+      .select('role')
+      .eq('id', session.user.id)
+      .single();
+    if (!roleError && roleData) role = roleData.role;
+  }
+
+  if (pathname === '/admin/login' && (role === 'admin' || role === 'frontdesk')) {
+    return NextResponse.redirect(new URL('/admin/dashboard', req.url));
+  }
+
+  if (isAccessingProtectedRoute) {
+    if (!session) {
+      return NextResponse.redirect(new URL('/admin/login', req.url));
+    }
+
+    if (role === 'admin') return res;
+
+    if (role === 'frontdesk') {
+      if (pathname === '/admin/dashboard') return res;
+      return NextResponse.redirect(new URL('/admin/dashboard', req.url));
+    }
+
+    // Unknown or missing roles have no admin-area access.
+    return NextResponse.redirect(new URL('/', req.url));
   }
 
   return res;

@@ -2,7 +2,7 @@ import AdminHeader from '@/components/admin-header';
 import { createServerClient } from '@/lib/supabase/server';
 
 type UserRoleRow = {
-  role: string;
+  role: 'admin' | 'frontdesk' | string;
 };
 
 export default async function AdminLayout({
@@ -15,23 +15,23 @@ export default async function AdminLayout({
     data: { user },
   } = await supabase.auth.getUser();
 
-  let isAdmin = false;
+  let role: string | null = null;
 
   if (user?.id) {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('user_roles' as never)
       .select('role')
       .eq('id', user.id)
       .single();
 
-    const roleRow = data as UserRoleRow | null;
-    isAdmin = roleRow?.role === 'admin';
+    const roleRow = !error ? (data as UserRoleRow | null) : null;
+    role = roleRow?.role ?? null;
   }
 
   return (
-    <div className="flex flex-col min-h-screen">
-      <AdminHeader isAdmin={isAdmin} />
-      <main className="flex-1">{children}</main>
+    <div className="min-h-screen md:flex">
+      {(role === 'admin' || role === 'frontdesk') && <AdminHeader role={role} />}
+      <main className="min-w-0 flex-1">{children}</main>
     </div>
   );
 }

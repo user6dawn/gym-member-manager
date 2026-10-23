@@ -12,8 +12,9 @@ import { Loader2, Upload } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { createClient } from '@/lib/supabase/client';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { sendNewUserEmail } from '@/lib/email';
+import { sendNewUserEmail } from '@/app/actions/send-email';
 import Image from 'next/image';
+import { validateImageFile, compressImage, blobToFile } from '@/lib/image-utils';
 
 const formSchema = z.object({
   name: z.string().min(2, { message: 'Name must be at least 2 characters.' }),
@@ -44,15 +45,39 @@ export function MemberForm() {
     },
   });
 
-  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImageChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0] || null;
     if (file) {
-      setImage(file);
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setImagePreview(reader.result as string);
-      };
-      reader.readAsDataURL(file);
+      // Validate image
+      const validation = validateImageFile(file);
+      if (!validation.valid) {
+        toast({
+          title: "Invalid image",
+          description: validation.error,
+          variant: "destructive",
+        });
+        return;
+      }
+
+      try {
+        // Compress image
+        const compressedBlob = await compressImage(file);
+        const compressedFile = blobToFile(compressedBlob, file);
+
+        setImage(compressedFile);
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          setImagePreview(reader.result as string);
+        };
+        reader.readAsDataURL(compressedFile);
+      } catch (error) {
+        console.error('Error compressing image:', error);
+        toast({
+          title: "Error processing image",
+          description: "Failed to process the image. Please try another file.",
+          variant: "destructive",
+        });
+      }
     }
   };
 
@@ -65,69 +90,6 @@ export function MemberForm() {
       const normalizedName = values.name.trim();
       const normalizedPhone = values.phone.trim();
       const normalizedAddress = values.address.trim();
-
-      // Check if a user with this email already exists before any uploads
-      const { data: existingUser, error: existingUserError } = await supabase
-        .from('users')
-        .select('id')
-        .eq('email', normalizedEmail)
-        .maybeSingle();
-
-      if (existingUserError) {
-        throw existingUserError;
-      }
-
-      if (existingUser) {
-        toast({
-          title: "Email already registered",
-          description: "An account with this email already exists.",
-          variant: "destructive",
-        });
-        setIsLoading(false);
-        return;
-      }
-
-      // Check if a user with this phone already exists
-      const { data: phoneUsers, error: existingPhoneError } = await supabase
-        .from('users')
-        .select('id')
-        .eq('phone', normalizedPhone)
-        .limit(1);
-
-      if (existingPhoneError) {
-        throw existingPhoneError;
-      }
-
-      if (phoneUsers && phoneUsers.length > 0) {
-        toast({
-          title: "Phone already registered",
-          description: "An account with this phone number already exists.",
-          variant: "destructive",
-        });
-        setIsLoading(false);
-        return;
-      }
-
-      // Check for exact match on other identifying fields (name + address + gender)
-      const { data: profileDupUsers, error: profileDupError } = await supabase
-        .from('users')
-        .select('id')
-        .match({ name: normalizedName, address: normalizedAddress, gender: values.gender })
-        .limit(1);
-
-      if (profileDupError) {
-        throw profileDupError;
-      }
-
-      if (profileDupUsers && profileDupUsers.length > 0) {
-        toast({
-          title: "Duplicate profile detected",
-          description: "A member with the same name, address and gender already exists.",
-          variant: "destructive",
-        });
-        setIsLoading(false);
-        return;
-      }
 
       if (!image) {
         toast({
@@ -168,7 +130,8 @@ export function MemberForm() {
       }
 
       // Create the user with the image URL if available
-      const { error: userError, data: newUser } = await supabase
+      // Database constraints will handle duplicate email/phone
+      const { error: userError } = await supabase
         .from('users')
         .insert({
           name: normalizedName,
@@ -178,11 +141,37 @@ export function MemberForm() {
           gender: values.gender,
           image_url: imageUrl,
           status: false,
-        })
-        .select()
-        .single();
+        });
 
-      if (userError) throw userError;
+      if (userError) {
+        // Handle unique constraint violations
+        if (userError.code === '23505') {
+          // Unique violation
+          const constraintName = userError.message;
+          if (constraintName.includes('email')) {
+            toast({
+              title: "Email already registered",
+              description: "An account with this email already exists.",
+              variant: "destructive",
+            });
+          } else if (constraintName.includes('phone')) {
+            toast({
+              title: "Phone already registered",
+              description: "An account with this phone number already exists.",
+              variant: "destructive",
+            });
+          } else {
+            toast({
+              title: "Duplicate entry",
+              description: "This information is already registered.",
+              variant: "destructive",
+            });
+          }
+          setIsLoading(false);
+          return;
+        }
+        throw userError;
+      }
 
       // Send email notification
       try {
@@ -206,7 +195,7 @@ export function MemberForm() {
       form.reset();
       setImage(null);
       setImagePreview(null);
-      
+
       // Redirect to success page or home
       router.push('/form/success');
     } catch (error) {
@@ -317,7 +306,6 @@ export function MemberForm() {
                         alt="Profile preview"
                         width={80}
                         height={80}
-                        unoptimized
                         className="h-full w-full object-cover"
                       />
                     </div>

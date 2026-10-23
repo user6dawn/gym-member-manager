@@ -1,3 +1,4 @@
+import { redirect } from 'next/navigation';
 import { createServerClient } from '@/lib/supabase/server';
 import AdminStatsContent from '@/components/admin-stats-content';
 
@@ -12,6 +13,15 @@ type RecentSubscriptionRow = {
 
 export default async function AdminStatsPage() {
   const supabase = createServerClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) redirect('/admin/login');
+
+  const { data: role, error: roleError } = await supabase
+    .from('user_roles')
+    .select('role')
+    .eq('id', user.id)
+    .single();
+  if (roleError || role?.role !== 'admin') redirect('/admin/dashboard');
 
   const now = new Date();
   const range30Start = new Date(now);

@@ -1,3 +1,7 @@
+'use server';
+
+import { revalidatePath } from 'next/cache';
+
 type EmailParams = {
   userName: string;
   userPhone?: string;
@@ -5,10 +9,10 @@ type EmailParams = {
 };
 
 export async function sendNewUserEmail({ userName, userPhone, userEmail }: EmailParams) {
-  // Verify API key is available
-  const apiKey = process.env.NEXT_PUBLIC_BREVO_API_KEY;
+  // Verify API key is available (server-side only)
+  const apiKey = process.env.BREVO_API_KEY;
   if (!apiKey) {
-    console.error('Missing NEXT_PUBLIC_BREVO_API_KEY environment variable');
+    console.error('Missing BREVO_API_KEY environment variable');
     throw new Error('Brevo API key is not configured');
   }
 

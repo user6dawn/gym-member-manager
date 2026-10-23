@@ -1,22 +1,35 @@
+import { redirect } from 'next/navigation';
 import { createServerClient } from '@/lib/supabase/server';
 import AdminUsersTable from '@/components/admin-users-table';
 
+export const revalidate = 60; // Revalidate data every 60 seconds
+
 export default async function AdminUsersPage() {
   const supabase = createServerClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) redirect('/admin/login');
 
-  const { data: users, error } = await supabase
+  const { data: role, error: roleError } = await supabase
+    .from('user_roles')
+    .select('role')
+    .eq('id', user.id)
+    .single();
+  if (roleError || role?.role !== 'admin') redirect('/admin/dashboard');
+
+  const { data: users, error, count } = await supabase
     .from('users')
     .select(`
       id,
       name,
       email,
+      image_url,
       status,
       created_at,
       subscriptions:subscriptions(
         payment_date,
         expiration_date
       )
-    `)
+    `, { count: 'exact' })
     .order('created_at', { ascending: false });
 
   if (error || !users) {
@@ -32,7 +45,9 @@ export default async function AdminUsersPage() {
   }
 
   const now = new Date();
-  now.setHours(0, 0, 0, 0);
+  const today = [now.getFullYear(), now.getMonth() + 1, now.getDate()]
+    .map((part) => String(part).padStart(2, '0'))
+    .join('-');
 
   const usersWithSubscriptionStatus = users.map((user) => {
     const subscriptions =
@@ -43,7 +58,7 @@ export default async function AdminUsersPage() {
     const latestSubscription = subscriptions
       .slice()
       .sort((a, b) =>
-        new Date(b.expiration_date).getTime() - new Date(a.expiration_date).getTime(),
+        b.expiration_date.slice(0, 10).localeCompare(a.expiration_date.slice(0, 10)),
       )[0] || null;
 
     const lastSubscriptionDate = subscriptions
@@ -54,7 +69,7 @@ export default async function AdminUsersPage() {
       )[0]?.payment_date ?? null;
 
     const subscriptionStatus: 'active' | 'inactive' | 'expired' = latestSubscription
-      ? new Date(latestSubscription.expiration_date).getTime() >= now.getTime()
+      ? latestSubscription.expiration_date.slice(0, 10) > today
         ? 'active'
         : 'expired'
       : 'inactive';
@@ -71,10 +86,10 @@ export default async function AdminUsersPage() {
       <div>
         <h1 className="text-3xl font-bold">Users</h1>
         <p className="text-muted-foreground">
-          Browse, search, and filter all users.
+          Browse, search, and filter all users. Showing {usersWithSubscriptionStatus.length} of {count ?? 0} total users.
         </p>
       </div>
-      <AdminUsersTable users={usersWithSubscriptionStatus} />
+      <AdminUsersTable users={usersWithSubscriptionStatus} totalUsersCount={count ?? 0} />
     </div>
   );
 }
