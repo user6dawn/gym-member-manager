@@ -1,5 +1,4 @@
 import { MemberForm } from '@/components/member-form';
-import Link from 'next/link';
 
 export default function MemberRegistrationPage() {
   return (

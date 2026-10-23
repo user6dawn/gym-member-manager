@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useState, Fragment, type KeyboardEvent } from 'react';
 import { useRouter } from 'next/navigation';
-import Image from 'next/image';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';

@@ -1,7 +1,5 @@
 'use server';
 
-import { revalidatePath } from 'next/cache';
-
 type EmailParams = {
   userName: string;
   userPhone?: string;
